@@ -1,0 +1,32 @@
+[package]
+name = "cloudflare-tunnels-operator"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+doc = false
+name = "crdgen"
+path = "src/crdgen.rs"
+
+[dependencies]
+kube = { version = "0.92", features = ["runtime", "derive"] }
+k8s-openapi = { version = "0.22", features = ["latest"] }
+tokio = { version = "1.37", features = ["full"] }
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.11"
+thiserror = "1.0"
+futures-util = "0.3"
+clap = { version = "4.5", features = ["derive", "env"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+schemars = "0.8"
+serde_json = "1.0"
+cloudflare = { version = "0.12", git = "https://github.com/cloudflare/cloudflare-rs", default-features = false, features = [
+    "rustls-tls",
+] }
+rand = "0.8"
+sha256 = "1.5"
+base64 = "0.22"
+regex = "1.10"
+actix-web = "4"

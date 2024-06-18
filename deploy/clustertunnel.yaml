@@ -1,0 +1,11 @@
+apiVersion: cloudflare-tunnels-operator.io/v1alpha1
+kind: ClusterTunnel
+metadata:
+  name: devtunnel
+spec:
+  cloudflare:
+    accountId: some-account-id
+    zoneId: some-zone-id
+    apiTokenSecretRef:
+      name: cloudflare-credentials
+      key: token
