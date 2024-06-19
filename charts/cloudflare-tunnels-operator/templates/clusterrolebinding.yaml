@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "cloudflare-tunnels-operator.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "cloudflare-tunnels-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "cloudflare-tunnels-operator.serviceAccountName" . }}
+  apiGroup: rbac.authorization.k8s.io
