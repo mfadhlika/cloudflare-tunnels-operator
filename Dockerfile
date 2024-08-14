@@ -6,7 +6,7 @@ RUN apk add --no-cache pkgconfig openssl openssl-dev musl-dev
 
 COPY . .
 
-RUN cargo build --bin cloudflare-tunnels-operator --release
+RUN cargo build --bin cloudflare-tunnels-operator --release --locked
 
 FROM scratch AS runtime
 
