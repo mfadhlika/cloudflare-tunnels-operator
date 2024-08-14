@@ -577,6 +577,7 @@ dependencies = [
  "cloudflare",
  "env_logger",
  "futures-util",
+ "json-patch",
  "k8s-openapi",
  "kube",
  "log",

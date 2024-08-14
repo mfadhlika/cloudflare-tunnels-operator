@@ -29,23 +29,19 @@ use super::{error_policy, OPERATOR_MANAGER};
 const INGRESS_FINALIZER: &'static str = "ingress.cloudflare-tunnels-operator.io/finalizer";
 
 async fn patch_deployment(deploy_api: &Api<Deployment>, hash: String) -> Result<(), Error> {
-    let annotations = serde_json::json!({
-        "spec": {
-            "template": {
-                "metadata": {
-                    "annotations" : {
-                        ANNOTATION_CONFIG_HASH: hash
-                    }
-                }
-            }
-        }
-    });
+    let patch: json_patch::Patch = serde_json::from_value(serde_json::json!([
+        { 
+            "op": "replace", 
+            "path": format!("/spec/template/metadata/annotations/{}", ANNOTATION_CONFIG_HASH.replace("/", "~1")), 
+            "value": hash 
+        },
+      ])).map_err(|err|Error::Other(anyhow!("parse patch: {err}")))?;
 
     deploy_api
         .patch(
             "cloudflared",
             &PatchParams::apply(OPERATOR_MANAGER),
-            &Patch::Merge(&annotations),
+            &Patch::Json::<()>(patch),
         )
         .await?;
 
