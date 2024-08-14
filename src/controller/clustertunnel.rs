@@ -93,6 +93,8 @@ impl ClusterTunnel {
         let secret_api: Api<Secret> = Api::namespaced(client.clone(), &ns);
         let deploy_api: Api<Deployment> = Api::namespaced(client.clone(), &ns);
 
+        let tunnel_name = self.spec.name.clone().unwrap_or_else(|| self.name_any());
+
         let mut labels = BTreeMap::new();
         labels.insert(
             "app.kubernetes.io/part-of".to_string(),
@@ -105,22 +107,26 @@ impl ClusterTunnel {
 
         let creds_json = serde_json::to_string(creds).unwrap();
 
-        let secret = Secret {
-            metadata: ObjectMeta {
-                name: Some(SECRET_NAME.to_string()),
-                namespace: Some(ns.to_owned()),
-                owner_references: Some(oref.to_vec()),
-                ..ObjectMeta::default()
-            },
-            string_data: Some({
-                let mut map = BTreeMap::new();
-                map.insert("credentials.json".to_string(), creds_json.clone());
-                map
-            }),
-            ..Default::default()
-        };
+        let (secret_name, secret_key) = if let Some(secret_ref) = self.spec.tunnel_secret_ref.as_ref() {
+            (secret_ref.name.clone(), Some(secret_ref.key.clone()))
+        } else {
+            let secret_name = format!("cloudflared-{tunnel_name}-credentials");
+            let secret = Secret {
+                metadata: ObjectMeta {
+                    name: Some(secret_name.clone()),
+                    namespace: Some(ns.to_owned()),
+                    owner_references: Some(oref.to_vec()),
+                    ..ObjectMeta::default()
+                },
+                string_data: Some({
+                    let mut map = BTreeMap::new();
+                    map.insert("credentials.json".to_string(), creds_json.clone());
+                    map
+                }),
+                ..Default::default()
+            };
 
-        secret_api
+            secret_api
             .patch(
                 &secret.name_any(),
                 &PatchParams::apply(OPERATOR_MANAGER),
@@ -128,8 +134,12 @@ impl ClusterTunnel {
             )
             .await?;
 
+            (secret_name, Some("credentials.json".to_string()))
+        };
+
+        let config_name = format!("cloudflared-{tunnel_name}-config");
         let config = cm_api
-            .get_opt("cloudflared-config")
+            .get_opt(&config_name)
             .await?
             .and_then(|cm| cm.data)
             .and_then(|data| data.get("config.yaml").cloned())
@@ -149,7 +159,7 @@ impl ClusterTunnel {
 
         let config_map = ConfigMap {
             metadata: ObjectMeta {
-                name: Some(CONFIG_MAP_NAME.to_string()),
+                name: Some(config_name.to_string()),
                 namespace: Some(ns.to_owned()),
                 owner_references: Some(oref.to_vec()),
                 ..ObjectMeta::default()
@@ -198,7 +208,7 @@ impl ClusterTunnel {
                             Volume {
                                 name: "config".to_string(),
                                 config_map: Some(ConfigMapVolumeSource {
-                                    name: Some(CONFIG_MAP_NAME.to_string()),
+                                    name: Some(config_name.to_string()),
                                     ..ConfigMapVolumeSource::default()
                                 }),
                                 ..Volume::default()
@@ -206,7 +216,7 @@ impl ClusterTunnel {
                             Volume {
                                 name: "credentials".to_string(),
                                 secret: Some(SecretVolumeSource {
-                                    secret_name: Some(SECRET_NAME.to_string()),
+                                    secret_name: Some(secret_name),
                                     ..SecretVolumeSource::default()
                                 }),
                                 ..Volume::default()
@@ -233,7 +243,8 @@ impl ClusterTunnel {
                                 },
                                 VolumeMount {
                                     name: "credentials".to_string(),
-                                    mount_path: "/credentials".to_string(),
+                                    mount_path: "/credentials/credentials.json".to_string(),
+                                    sub_path: secret_key,
                                     ..VolumeMount::default()
                                 },
                             ]),
@@ -334,7 +345,7 @@ impl ClusterTunnel {
                 .tunnel_secret_ref
                 .clone()
                 .unwrap_or_else(|| SecretRef {
-                    name: SECRET_NAME.to_string(),
+                    name: format!("cloudflared-{tunnel_name}-credentials"),
                     key: "credentials.json".to_string(),
                 });
 

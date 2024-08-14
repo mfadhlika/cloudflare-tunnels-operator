@@ -77,7 +77,15 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
     let ing_api: Api<Ingress> = Api::namespaced(client.clone(), &ing_ns);
     let svc_api: Api<Service> = Api::namespaced(client.clone(), &ing_ns);
 
-    let config_map = cm_api.get("cloudflared-config").await?;
+    let tunnel_name = if let Some(tunnel_name) = obj.metadata.annotations.as_ref().and_then(|ann|ann.get(ANNOTATION_TUNNEL_NAME)) {
+        tunnel_name.to_owned()
+    } else if let Some(tunnel) = ct_api.list(&ListParams::default()).await?.items.first() {
+        tunnel.spec.name.clone().unwrap_or_else(|| tunnel.name_any())
+    } else {
+        return Err(Error::Other(anyhow!("no clustertunnel found")));
+    };
+    let config_name = format!("cloudflared-{tunnel_name}-config");
+    let config_map = cm_api.get(&config_name).await?;
     let mut config = config_map
         .data
         .as_ref()
