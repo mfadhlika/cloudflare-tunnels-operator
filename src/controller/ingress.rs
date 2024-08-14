@@ -226,10 +226,17 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                 let config_yaml = serde_yaml::to_string(&config).unwrap();
                 let config_hash = sha256::digest(&config_yaml);
 
+                /*
+                name: Some(config_name.to_string()),
+                namespace: Some(ns.to_owned()),
+                owner_references: Some(oref.to_vec()),
+                 */
                 let config_map = ConfigMap {
                     metadata: ObjectMeta {
-                        managed_fields: None,
-                        ..config_map.metadata.clone()
+                        name: Some(config_map.name_any()),
+                        namespace: config_map.namespace(),
+                        owner_references: Some(config_map.owner_references().to_vec()),
+                        ..ObjectMeta::default()
                     },
                     data: Some({
                         let mut map = BTreeMap::new();
