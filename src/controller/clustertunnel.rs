@@ -208,7 +208,7 @@ impl ClusterTunnel {
                             Volume {
                                 name: "config".to_string(),
                                 config_map: Some(ConfigMapVolumeSource {
-                                    name: Some(config_name.to_string()),
+                                    name: config_name.to_string(),
                                     ..ConfigMapVolumeSource::default()
                                 }),
                                 ..Volume::default()
