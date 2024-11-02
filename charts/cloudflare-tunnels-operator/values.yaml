@@ -14,6 +14,8 @@ imagePullSecrets: []
 nameOverride: ''
 fullnameOverride: ''
 
+logLevel: error
+
 ingressClass:
   enabled: true
   isDefaultClass: false
