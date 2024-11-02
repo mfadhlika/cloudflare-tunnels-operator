@@ -186,7 +186,7 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                     }
 
                     let hostname = match &rule.host {
-                        Some(host) => host.clone(),
+                        Some(host) => host.to_string(),
                         None => "@".to_string(),
                     };
 
@@ -216,7 +216,7 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                                 .create_dns_record(
                                     &clustertunnel.spec.cloudflare.zone_id,
                                     &hostname,
-                                    &config.tunnel,
+                                    &cname,
                                 )
                                 .await?;
                         }
@@ -302,7 +302,7 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                     }
 
                     let hostname = match &rule.host {
-                        Some(host) => host.clone(),
+                        Some(host) => host.to_string(),
                         None => "@".to_string(),
                     };
 

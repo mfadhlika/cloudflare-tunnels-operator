@@ -80,7 +80,7 @@ impl Client {
         &self,
         zone_id: &str,
         hostname: &str,
-        tunnel_id: &str,
+        content: &str,
     ) -> Result<(), Error> {
         let endpoint = cloudflare::endpoints::dns::CreateDnsRecord {
             zone_identifier: zone_id,
@@ -88,7 +88,7 @@ impl Client {
                 proxied: Some(true),
                 name: hostname,
                 content: cloudflare::endpoints::dns::DnsContent::CNAME {
-                    content: format!("{tunnel_id}.cfargotunnel.com"),
+                    content: content.to_string(),
                 },
                 ttl: None,
                 priority: None,
@@ -133,9 +133,6 @@ impl Client {
         let endpoint = cloudflare::endpoints::dns::ListDnsRecords {
             zone_identifier: zone_id,
             params: cloudflare::endpoints::dns::ListDnsRecordsParams {
-                record_type: Some(cloudflare::endpoints::dns::DnsContent::CNAME {
-                    content: "".to_string(),
-                }),
                 name: Some(hostname.to_string()),
                 ..cloudflare::endpoints::dns::ListDnsRecordsParams::default()
             },
