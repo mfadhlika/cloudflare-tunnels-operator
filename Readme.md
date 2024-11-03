@@ -8,6 +8,10 @@ Expose kubernetes service to internet with Cloudflare Tunnels using Ingress reso
 - Automatic dns record creation
 - Use Ingress resource
 
+## To Do
+
+- [ ] Clean up if ingress is updated with different ingress
+
 ## Installation
 
 Install using Helm
