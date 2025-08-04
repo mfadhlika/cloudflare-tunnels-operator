@@ -107,35 +107,36 @@ impl ClusterTunnel {
 
         let creds_json = serde_json::to_string(creds).unwrap();
 
-        let (secret_name, secret_key) = if let Some(secret_ref) = self.spec.tunnel_secret_ref.as_ref() {
-            (secret_ref.name.clone(), Some(secret_ref.key.clone()))
-        } else {
-            let secret_name = format!("cloudflared-{tunnel_name}-credentials");
-            let secret = Secret {
-                metadata: ObjectMeta {
-                    name: Some(secret_name.clone()),
-                    namespace: Some(ns.to_owned()),
-                    owner_references: Some(oref.to_vec()),
-                    ..ObjectMeta::default()
-                },
-                string_data: Some({
-                    let mut map = BTreeMap::new();
-                    map.insert("credentials.json".to_string(), creds_json.clone());
-                    map
-                }),
-                ..Default::default()
+        let (secret_name, secret_key) =
+            if let Some(secret_ref) = self.spec.tunnel_secret_ref.as_ref() {
+                (secret_ref.name.clone(), Some(secret_ref.key.clone()))
+            } else {
+                let secret_name = format!("cloudflared-{tunnel_name}-credentials");
+                let secret = Secret {
+                    metadata: ObjectMeta {
+                        name: Some(secret_name.clone()),
+                        namespace: Some(ns.to_owned()),
+                        owner_references: Some(oref.to_vec()),
+                        ..ObjectMeta::default()
+                    },
+                    string_data: Some({
+                        let mut map = BTreeMap::new();
+                        map.insert("credentials.json".to_string(), creds_json.clone());
+                        map
+                    }),
+                    ..Default::default()
+                };
+
+                secret_api
+                    .patch(
+                        &secret.name_any(),
+                        &PatchParams::apply(OPERATOR_MANAGER),
+                        &Patch::Apply(&secret),
+                    )
+                    .await?;
+
+                (secret_name, Some("credentials.json".to_string()))
             };
-
-            secret_api
-            .patch(
-                &secret.name_any(),
-                &PatchParams::apply(OPERATOR_MANAGER),
-                &Patch::Apply(&secret),
-            )
-            .await?;
-
-            (secret_name, Some("credentials.json".to_string()))
-        };
 
         let config_name = format!("cloudflared-{tunnel_name}-config");
         let config = cm_api
@@ -224,7 +225,7 @@ impl ClusterTunnel {
                         ]),
                         containers: vec![Container {
                             name: "cloudflared".to_string(),
-                            image: Some("cloudflare/cloudflared:2024.8.2".to_string()),
+                            image: Some("cloudflare/cloudflared:2025.7.0".to_string()),
                             args: Some(vec![
                                 "tunnel".to_string(),
                                 "--no-autoupdate".to_string(),
