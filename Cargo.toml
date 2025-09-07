@@ -1,6 +1,6 @@
 [package]
 name = "cloudflare-tunnels-operator"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 
 [[bin]]
@@ -22,7 +22,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 schemars = "0.8"
 serde_json = "1.0"
-cloudflare = { version = "0.12", git = "https://github.com/cloudflare/cloudflare-rs", default-features = false, features = [
+cloudflare = { version = "0.12", default-features = false, features = [
     "rustls-tls",
 ] }
 rand = "0.8"
