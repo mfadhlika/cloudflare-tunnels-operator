@@ -1,6 +1,6 @@
 use crate::Error;
 use base64::{prelude::BASE64_STANDARD, Engine};
-use cloudflare::endpoints::dns::DnsRecord;
+use cloudflare::endpoints::dns::dns::DnsRecord;
 use rand::RngCore;
 
 use super::TunnelCredentials;
@@ -8,14 +8,14 @@ pub use cloudflare::framework::auth::Credentials;
 
 pub struct Client {
     account_id: String,
-    client: cloudflare::framework::async_api::Client,
+    client: cloudflare::framework::client::async_api::Client,
 }
 
 impl Client {
     pub fn new(account_id: String, credentials: Credentials) -> Result<Self, Error> {
-        let client = cloudflare::framework::async_api::Client::new(
+        let client = cloudflare::framework::client::async_api::Client::new(
             credentials,
-            cloudflare::framework::HttpApiClientConfig::default(),
+            cloudflare::framework::client::ClientConfig::default(),
             cloudflare::framework::Environment::Production,
         )?;
 
@@ -82,12 +82,12 @@ impl Client {
         hostname: &str,
         content: &str,
     ) -> Result<(), Error> {
-        let endpoint = cloudflare::endpoints::dns::CreateDnsRecord {
+        let endpoint = cloudflare::endpoints::dns::dns::CreateDnsRecord {
             zone_identifier: zone_id,
-            params: cloudflare::endpoints::dns::CreateDnsRecordParams {
+            params: cloudflare::endpoints::dns::dns::CreateDnsRecordParams {
                 proxied: Some(true),
                 name: hostname,
-                content: cloudflare::endpoints::dns::DnsContent::CNAME {
+                content: cloudflare::endpoints::dns::dns::DnsContent::CNAME {
                     content: content.to_string(),
                 },
                 ttl: None,
@@ -107,13 +107,13 @@ impl Client {
         hostname: &str,
         tunnel_id: &str,
     ) -> Result<(), Error> {
-        let endpoint = cloudflare::endpoints::dns::UpdateDnsRecord {
+        let endpoint = cloudflare::endpoints::dns::dns::UpdateDnsRecord {
             zone_identifier: zone_id,
             identifier: domain_id,
-            params: cloudflare::endpoints::dns::UpdateDnsRecordParams {
+            params: cloudflare::endpoints::dns::dns::UpdateDnsRecordParams {
                 proxied: Some(true),
                 name: hostname,
-                content: cloudflare::endpoints::dns::DnsContent::CNAME {
+                content: cloudflare::endpoints::dns::dns::DnsContent::CNAME {
                     content: format!("{tunnel_id}.cfargotunnel.com"),
                 },
                 ttl: None,
@@ -130,11 +130,11 @@ impl Client {
         zone_id: &str,
         hostname: &str,
     ) -> Result<Option<DnsRecord>, Error> {
-        let endpoint = cloudflare::endpoints::dns::ListDnsRecords {
+        let endpoint = cloudflare::endpoints::dns::dns::ListDnsRecords {
             zone_identifier: zone_id,
-            params: cloudflare::endpoints::dns::ListDnsRecordsParams {
+            params: cloudflare::endpoints::dns::dns::ListDnsRecordsParams {
                 name: Some(hostname.to_string()),
-                ..cloudflare::endpoints::dns::ListDnsRecordsParams::default()
+                ..cloudflare::endpoints::dns::dns::ListDnsRecordsParams::default()
             },
         };
 
@@ -144,7 +144,7 @@ impl Client {
     }
 
     pub async fn delete_dns_record(&self, zone_id: &str, domain_id: &str) -> Result<(), Error> {
-        let endpoint = cloudflare::endpoints::dns::DeleteDnsRecord {
+        let endpoint = cloudflare::endpoints::dns::dns::DeleteDnsRecord {
             zone_identifier: zone_id,
             identifier: domain_id,
         };

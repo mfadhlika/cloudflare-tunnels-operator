@@ -17,7 +17,7 @@ use kube::{
 use log::{info, warn};
 
 use crate::{
-    cloudflare::{dns::DnsContent, Client as CloudflareClient, TunnelConfig, TunnelIngress},
+    cloudflare::{dns::dns::DnsContent, Client as CloudflareClient, TunnelConfig, TunnelIngress},
     context::Context,
     controller::utils::*,
     error::Error,
