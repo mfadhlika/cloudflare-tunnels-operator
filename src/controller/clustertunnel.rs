@@ -174,7 +174,7 @@ impl ClusterTunnel {
             .ok_or(anyhow!("no cert.pem"))?;
 
         let config_name = format!("cloudflared-{tunnel_name}-config");
-        let config = cm_api
+        let mut config = cm_api
             .get_opt(&config_name)
             .await?
             .and_then(|cm| cm.data)
@@ -189,6 +189,10 @@ impl ClusterTunnel {
                 }],
                 ..TunnelConfig::default()
             });
+
+        if config.tunnel != creds.tunnel_id {
+            config.tunnel = creds.tunnel_id.clone();
+        }
 
         let config_yaml = serde_yaml::to_string(&config).unwrap();
         let config_hash = sha256::digest(&config_yaml);
