@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 pub struct TunnelCredentials {
     pub account_tag: String,
     pub tunnel_secret: String,
+    #[serde(rename = "TunnelID")]
     pub tunnel_id: String,
 }
 
