@@ -61,6 +61,17 @@ spec:
               name:
                 nullable: true
                 type: string
+              originCertSecretRef:
+                nullable: true
+                properties:
+                  key:
+                    type: string
+                  name:
+                    type: string
+                required:
+                - key
+                - name
+                type: object
               tunnelSecretRef:
                 nullable: true
                 properties:

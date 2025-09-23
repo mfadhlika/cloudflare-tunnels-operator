@@ -76,6 +76,7 @@ pub struct CloudflareCredentials {
 pub struct ClusterTunnelSpec {
     pub name: Option<String>,
     pub tunnel_secret_ref: Option<SecretRef>,
+    pub origin_cert_secret_ref: Option<SecretRef>,
     pub cloudflare: CloudflareCredentials,
 }
 
@@ -137,6 +138,13 @@ impl ClusterTunnel {
 
                 (secret_name, Some("credentials.json".to_string()))
             };
+
+        let (origin_cert_secret_name, origin_cert_secret_key) = self
+            .spec
+            .origin_cert_secret_ref
+            .as_ref()
+            .map(|secret_ref| (secret_ref.name.clone(), Some(secret_ref.key.clone())))
+            .ok_or(anyhow!("no cert.pem"))?;
 
         let config_name = format!("cloudflared-{tunnel_name}-config");
         let config = cm_api
@@ -222,6 +230,14 @@ impl ClusterTunnel {
                                 }),
                                 ..Volume::default()
                             },
+                            Volume {
+                                name: "certificate".to_string(),
+                                secret: Some(SecretVolumeSource {
+                                    secret_name: Some(origin_cert_secret_name),
+                                    ..SecretVolumeSource::default()
+                                }),
+                                ..Volume::default()
+                            },
                         ]),
                         containers: vec![Container {
                             name: "cloudflared".to_string(),
@@ -246,6 +262,12 @@ impl ClusterTunnel {
                                     name: "credentials".to_string(),
                                     mount_path: "/credentials/credentials.json".to_string(),
                                     sub_path: secret_key,
+                                    ..VolumeMount::default()
+                                },
+                                VolumeMount {
+                                    name: "certificate".to_string(),
+                                    mount_path: "/etc/cloudflared/cert.pem".to_string(),
+                                    sub_path: origin_cert_secret_key,
                                     ..VolumeMount::default()
                                 },
                             ]),
