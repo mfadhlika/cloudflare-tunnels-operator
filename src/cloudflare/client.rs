@@ -1,5 +1,5 @@
 use crate::Error;
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 use cloudflare::endpoints::dns::dns::DnsRecord;
 use rand::RngCore;
 
@@ -24,7 +24,7 @@ impl Client {
 
     pub async fn create_tunnel(&self, tunnel_name: &str) -> Result<TunnelCredentials, Error> {
         let mut tunnel_secret = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut tunnel_secret);
+        rand::rng().fill_bytes(&mut tunnel_secret);
 
         let tunnel_secret = tunnel_secret.to_vec();
 
