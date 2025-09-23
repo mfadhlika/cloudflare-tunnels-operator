@@ -66,6 +66,32 @@ pub struct CloudflareCredentials {
     pub secret_ref: CloudflareSecretRef,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudflaredConfig {
+    pub metrics: Option<String>,
+    pub protocol: Option<String>,
+}
+
+impl Default for CloudflaredConfig {
+    fn default() -> Self {
+        Self {
+            metrics: Some("0.0.0.0:2000".to_string()),
+            protocol: Some("auto".to_string()),
+        }
+    }
+}
+
+impl CloudflaredConfig {
+    fn metrics(&self) -> String {
+        self.metrics.clone().unwrap_or("0.0.0.0:2000".to_string())
+    }
+
+    fn protocol(&self) -> String {
+        self.protocol.clone().unwrap_or("auto".to_string())
+    }
+}
+
 #[derive(CustomResource, Deserialize, Serialize, Clone, Debug, JsonSchema)]
 #[kube(
     kind = "ClusterTunnel",
@@ -78,6 +104,7 @@ pub struct ClusterTunnelSpec {
     pub tunnel_secret_ref: Option<SecretRef>,
     pub origin_cert_secret_ref: Option<SecretRef>,
     pub cloudflare: CloudflareCredentials,
+    pub cloudflared: Option<CloudflaredConfig>,
 }
 
 impl ClusterTunnel {
@@ -189,6 +216,8 @@ impl ClusterTunnel {
             )
             .await?;
 
+        let cloudflared_config = self.spec.cloudflared.clone().unwrap_or_default();
+
         let deployment = Deployment {
             metadata: ObjectMeta {
                 name: Some("cloudflared".to_string()),
@@ -246,7 +275,9 @@ impl ClusterTunnel {
                                 "tunnel".to_string(),
                                 "--no-autoupdate".to_string(),
                                 "--metrics".to_string(),
-                                "0.0.0.0:2000".to_string(),
+                                cloudflared_config.metrics(),
+                                "--protocol".to_string(),
+                                cloudflared_config.protocol(),
                                 "--config".to_string(),
                                 "/config/config.yaml".to_string(),
                                 "run".to_string(),

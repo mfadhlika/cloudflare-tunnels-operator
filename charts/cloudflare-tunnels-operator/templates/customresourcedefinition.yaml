@@ -58,6 +58,16 @@ spec:
                 - accountId
                 - zoneId
                 type: object
+              cloudflared:
+                nullable: true
+                properties:
+                  metrics:
+                    nullable: true
+                    type: string
+                  protocol:
+                    nullable: true
+                    type: string
+                type: object
               name:
                 nullable: true
                 type: string
