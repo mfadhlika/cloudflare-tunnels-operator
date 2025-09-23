@@ -2,6 +2,17 @@ apiVersion: v1
 entries:
   cloudflare-tunnels-operator:
   - apiVersion: v2
+    appVersion: 0.3.0
+    created: "2025-09-23T07:20:04.42067482Z"
+    description: A Kubernetes Operator for exposing service with Cloudflare Tunnels
+      using Ingress resources
+    digest: 57e02b928ba1b06a35bc6c279c0ed9496bb2e9a12be82525d0036c5033d8eee9
+    name: cloudflare-tunnels-operator
+    type: application
+    urls:
+    - https://github.com/mfadhlika/cloudflare-tunnels-operator/releases/download/cloudflare-tunnels-operator-0.3.0/cloudflare-tunnels-operator-0.3.0.tgz
+    version: 0.3.0
+  - apiVersion: v2
     appVersion: 0.2.6
     created: "2025-09-23T05:07:57.503135969Z"
     description: A Kubernetes Operator for exposing service with Cloudflare Tunnels
@@ -100,4 +111,4 @@ entries:
     urls:
     - https://github.com/mfadhlika/cloudflare-tunnels-operator/releases/download/cloudflare-tunnels-operator-0.1.0/cloudflare-tunnels-operator-0.1.0.tgz
     version: 0.1.0
-generated: "2025-09-23T05:07:57.503206261Z"
+generated: "2025-09-23T07:20:04.420716379Z"
