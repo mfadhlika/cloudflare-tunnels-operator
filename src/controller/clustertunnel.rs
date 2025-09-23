@@ -13,9 +13,9 @@ use k8s_openapi::{
     apimachinery::pkg::{apis::meta::v1::LabelSelector, util::intstr::IntOrString},
 };
 use kube::{
-    api::{ObjectMeta, Patch, PatchParams},
-    runtime::{controller::Action, finalizer, watcher, Controller},
     Api, CustomResource, ResourceExt,
+    api::{ObjectMeta, Patch, PatchParams},
+    runtime::{Controller, controller::Action, finalizer, watcher},
 };
 use log::{info, warn};
 use schemars::JsonSchema;
@@ -27,9 +27,9 @@ use crate::{
     error::Error,
 };
 
-use super::{error_policy, utils::*, OPERATOR_MANAGER};
+use super::{OPERATOR_MANAGER, error_policy, utils::*};
 
-const CLUSTER_TUNNEL_FINALIZER: &'static str = "cluster-tunnel.cloudflare-tunnels.io/finalizer";
+const CLUSTER_TUNNEL_FINALIZER: &str = "cluster-tunnel.cloudflare-tunnels.io/finalizer";
 
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -264,7 +264,6 @@ impl ClusterTunnel {
                         }],
                         ..PodSpec::default()
                     }),
-                    ..PodTemplateSpec::default()
                 },
                 ..DeploymentSpec::default()
             }),

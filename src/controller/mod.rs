@@ -12,7 +12,7 @@ pub mod ingress;
 
 mod utils;
 
-pub(super) const OPERATOR_MANAGER: &'static str = "cloudflare-tunnels-operator";
+pub(super) const OPERATOR_MANAGER: &str = "cloudflare-tunnels-operator";
 
 pub(super) fn error_policy<K>(_obj: Arc<K>, err: &Error, _ctx: Arc<Context>) -> Action {
     error!("reason: {}", err);

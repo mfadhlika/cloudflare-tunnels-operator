@@ -26,7 +26,7 @@ use crate::{
 
 use super::{error_policy, OPERATOR_MANAGER};
 
-const INGRESS_FINALIZER: &'static str = "ingress.cloudflare-tunnels-operator.io/finalizer";
+const INGRESS_FINALIZER: &str = "ingress.cloudflare-tunnels-operator.io/finalizer";
 
 async fn patch_deployment(deploy_api: &Api<Deployment>, hash: String) -> Result<(), Error> {
     let patch: json_patch::Patch = serde_json::from_value(serde_json::json!([
@@ -146,7 +146,7 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                                 continue;
                             };
                             let Some(port) = svc_spec.ports.iter().flatten().find_map(|svc_port| {
-                                (svc_port.name == Some(name.to_string())).then(|| svc_port.port)
+                                (svc_port.name == Some(name.to_string())).then_some(svc_port.port)
                             }) else {
                                 continue;
                             };
@@ -174,7 +174,7 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                             config.ingress.iter().position(|ing| ing.service == service)
                         {
                             config.ingress[index] = ing
-                        } else if config.ingress.len() == 0 {
+                        } else if config.ingress.is_empty() {
                             config.ingress.push(ing);
                             config.ingress.push(TunnelIngress {
                                 service: "http_status:404".to_string(),
@@ -294,11 +294,9 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                             continue;
                         };
 
-                        config.ingress = config
+                        config
                             .ingress
-                            .into_iter()
-                            .filter(|ing| !ing.service.contains(&svc.name))
-                            .collect();
+                            .retain(|ing| !ing.service.contains(&svc.name));
                     }
 
                     let hostname = match &rule.host {

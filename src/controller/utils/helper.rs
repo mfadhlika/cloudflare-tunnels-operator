@@ -4,10 +4,10 @@ use kube::Api;
 use std::sync::Arc;
 
 use crate::{
+    Error,
     cloudflare::Credentials,
     context::Context,
     controller::clustertunnel::{CloudflareCredentials, CloudflareSecretRef},
-    Error,
 };
 
 pub async fn get_credentials(
@@ -36,8 +36,8 @@ pub async fn get_credentials(
         String::from_utf8(value.clone().0).map_err(|err| anyhow!("value not a string: {err:?}"))?
     };
 
-    let creds = match &creds.secret_ref {
-        &CloudflareSecretRef::ApiKey(_) => {
+    let creds = match creds.secret_ref {
+        CloudflareSecretRef::ApiKey(_) => {
             let Some(email) = &creds.email else {
                 return Err(anyhow!("api key requires email").into());
             };
@@ -47,7 +47,7 @@ pub async fn get_credentials(
                 key: value,
             }
         }
-        &CloudflareSecretRef::ApiToken(_) => Credentials::UserAuthToken { token: value },
+        CloudflareSecretRef::ApiToken(_) => Credentials::UserAuthToken { token: value },
     };
 
     Ok(creds)

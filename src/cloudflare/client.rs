@@ -31,7 +31,7 @@ impl Client {
         let endpoint = cloudflare::endpoints::cfd_tunnel::create_tunnel::CreateTunnel {
             account_identifier: &self.account_id,
             params: cloudflare::endpoints::cfd_tunnel::create_tunnel::Params {
-                name: &tunnel_name,
+                name: tunnel_name,
                 tunnel_secret: &tunnel_secret,
                 config_src: &cloudflare::endpoints::cfd_tunnel::ConfigurationSrc::Local,
                 metadata: None,
