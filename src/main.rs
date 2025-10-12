@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use actix_web::{get, middleware, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{App, HttpRequest, HttpResponse, HttpServer, Responder, get, middleware};
 use clap::Parser;
-use cloudflare_tunnels_operator::{controller, Context};
+use cloudflare_tunnels_operator::{Context, controller};
 use log::info;
 
 #[derive(Parser, Debug)]
@@ -39,7 +39,7 @@ async fn main() -> Result<(), anyhow::Error> {
             .wrap(middleware::Logger::default().exclude("/health"))
             .service(health)
     })
-    .bind("0.0.0.0:2000")?
+    .bind("[::]:2000")?
     .shutdown_timeout(5)
     .run();
 
