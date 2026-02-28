@@ -6,8 +6,9 @@ use k8s_openapi::{
     api::{
         apps::v1::{Deployment, DeploymentSpec},
         core::v1::{
-            ConfigMap, ConfigMapVolumeSource, Container, HTTPGetAction, PodSpec, PodTemplateSpec,
-            Probe, Secret, SecretVolumeSource, Volume, VolumeMount,
+            ConfigMap, ConfigMapVolumeSource, Container, HTTPGetAction, PodSecurityContext,
+            PodSpec, PodTemplateSpec, Probe, Secret, SecretVolumeSource, Sysctl, Volume,
+            VolumeMount,
         },
     },
     apimachinery::pkg::{apis::meta::v1::LabelSelector, util::intstr::IntOrString},
@@ -92,7 +93,7 @@ impl CloudflaredConfig {
     fn protocol(&self) -> String {
         self.protocol.clone().unwrap_or("auto".to_string())
     }
-    
+
     fn edge_ip_version(&self) -> String {
         self.edge_ip_version.clone().unwrap_or("auto".to_string())
     }
@@ -327,6 +328,13 @@ impl ClusterTunnel {
                             }),
                             ..Container::default()
                         }],
+                        security_context: Some(PodSecurityContext {
+                            sysctls: Some(vec![Sysctl {
+                                name: "net.ipv4.ping_group_range".to_string(),
+                                value: "0 65535".to_string(),
+                            }]),
+                            ..PodSecurityContext::default()
+                        }),
                         ..PodSpec::default()
                     }),
                 },
