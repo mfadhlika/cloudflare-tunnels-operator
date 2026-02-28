@@ -71,6 +71,7 @@ pub struct CloudflareCredentials {
 pub struct CloudflaredConfig {
     pub metrics: Option<String>,
     pub protocol: Option<String>,
+    pub edge_ip_version: Option<String>,
 }
 
 impl Default for CloudflaredConfig {
@@ -78,6 +79,7 @@ impl Default for CloudflaredConfig {
         Self {
             metrics: Some("0.0.0.0:2000".to_string()),
             protocol: Some("auto".to_string()),
+            edge_ip_version: Some("auto".to_string()),
         }
     }
 }
@@ -89,6 +91,10 @@ impl CloudflaredConfig {
 
     fn protocol(&self) -> String {
         self.protocol.clone().unwrap_or("auto".to_string())
+    }
+    
+    fn edge_ip_version(&self) -> String {
+        self.edge_ip_version.clone().unwrap_or("auto".to_string())
     }
 }
 
@@ -282,6 +288,8 @@ impl ClusterTunnel {
                                 cloudflared_config.metrics(),
                                 "--protocol".to_string(),
                                 cloudflared_config.protocol(),
+                                "--edge-ip-version".to_string(),
+                                cloudflared_config.edge_ip_version(),
                                 "--config".to_string(),
                                 "/config/config.yaml".to_string(),
                                 "run".to_string(),
