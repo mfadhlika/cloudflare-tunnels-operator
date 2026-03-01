@@ -61,6 +61,9 @@ spec:
               cloudflared:
                 nullable: true
                 properties:
+                  edgeIpVersion:
+                    nullable: true
+                    type: string
                   metrics:
                     nullable: true
                     type: string
