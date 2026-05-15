@@ -1,7 +1,7 @@
 use crate::Error;
 use base64::{Engine, prelude::BASE64_STANDARD};
 use cloudflare::endpoints::dns::dns::DnsRecord;
-use rand::RngCore;
+use rand::prelude::*;
 
 use super::TunnelCredentials;
 pub use cloudflare::framework::auth::Credentials;
