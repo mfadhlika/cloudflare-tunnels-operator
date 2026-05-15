@@ -10,27 +10,27 @@ use k8s_openapi::api::{
     },
 };
 use kube::{
-    api::{ListParams, ObjectMeta, Patch, PatchParams},
-    runtime::{controller::Action, finalizer, watcher, Controller},
     Api, ResourceExt,
+    api::{ListParams, ObjectMeta, Patch, PatchParams},
+    runtime::{Controller, controller::Action, finalizer, watcher},
 };
 use log::{info, warn};
 
 use crate::{
-    cloudflare::{dns::dns::DnsContent, Client as CloudflareClient, TunnelConfig, TunnelIngress},
+    ClusterTunnel,
+    cloudflare::{Client as CloudflareClient, TunnelConfig, TunnelIngress, dns::dns::DnsContent},
     context::Context,
     controller::utils::*,
     error::Error,
-    ClusterTunnel,
 };
 
-use super::{error_policy, OPERATOR_MANAGER};
+use super::{OPERATOR_MANAGER, error_policy};
 
 const INGRESS_FINALIZER: &str = "ingress.cloudflare-tunnels-operator.io/finalizer";
 
 async fn patch_deployment(deploy_api: &Api<Deployment>, hash: String) -> Result<(), Error> {
     let patch: json_patch::Patch = serde_json::from_value(serde_json::json!([
-        { 
+        {
             "op": "replace", 
             "path": format!("/spec/template/metadata/annotations/{}", ANNOTATION_CONFIG_HASH.replace("/", "~1")), 
             "value": hash 
@@ -73,10 +73,19 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
     let ing_api: Api<Ingress> = Api::namespaced(client.clone(), &ing_ns);
     let svc_api: Api<Service> = Api::namespaced(client.clone(), &ing_ns);
 
-    let tunnel_name = if let Some(tunnel_name) = obj.metadata.annotations.as_ref().and_then(|ann|ann.get(ANNOTATION_TUNNEL_NAME)) {
+    let tunnel_name = if let Some(tunnel_name) = obj
+        .metadata
+        .annotations
+        .as_ref()
+        .and_then(|ann| ann.get(ANNOTATION_TUNNEL_NAME))
+    {
         tunnel_name.to_owned()
     } else if let Some(tunnel) = ct_api.list(&ListParams::default()).await?.items.first() {
-        tunnel.spec.name.clone().unwrap_or_else(|| tunnel.name_any())
+        tunnel
+            .spec
+            .name
+            .clone()
+            .unwrap_or_else(|| tunnel.name_any())
     } else {
         return Err(Error::Other(anyhow!("no clustertunnel found")));
     };
@@ -185,40 +194,42 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                         }
                     }
 
-                    let hostname = match &rule.host {
-                        Some(host) => host.to_string(),
-                        None => "@".to_string(),
-                    };
+                    if !ctx.disable_dns.unwrap_or_default() {
+                        let hostname = match &rule.host {
+                            Some(host) => host.to_string(),
+                            None => "@".to_string(),
+                        };
 
-                    let dns_record = cloudflare_client
-                        .find_dns_record(&clustertunnel.spec.cloudflare.zone_id, &hostname)
-                        .await?;
+                        let dns_record = cloudflare_client
+                            .find_dns_record(&clustertunnel.spec.cloudflare.zone_id, &hostname)
+                            .await?;
 
-                    let cname = format!("{}.cfargotunnel.com", config.tunnel);
-                    match dns_record {
-                        Some(record) => match record.content {
-                            DnsContent::CNAME { content } if content == cname => {
-                                continue;
-                            }
-                            _ => {
+                        let cname = format!("{}.cfargotunnel.com", config.tunnel);
+                        match dns_record {
+                            Some(record) => match record.content {
+                                DnsContent::CNAME { content } if content == cname => {
+                                    continue;
+                                }
+                                _ => {
+                                    cloudflare_client
+                                        .update_dns_record(
+                                            &clustertunnel.spec.cloudflare.zone_id,
+                                            &record.id,
+                                            &hostname,
+                                            &config.tunnel,
+                                        )
+                                        .await?;
+                                }
+                            },
+                            None => {
                                 cloudflare_client
-                                    .update_dns_record(
+                                    .create_dns_record(
                                         &clustertunnel.spec.cloudflare.zone_id,
-                                        &record.id,
                                         &hostname,
-                                        &config.tunnel,
+                                        &cname,
                                     )
                                     .await?;
                             }
-                        },
-                        None => {
-                            cloudflare_client
-                                .create_dns_record(
-                                    &clustertunnel.spec.cloudflare.zone_id,
-                                    &hostname,
-                                    &cname,
-                                )
-                                .await?;
                         }
                     }
                 }
@@ -299,21 +310,26 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                             .retain(|ing| !ing.service.contains(&svc.name));
                     }
 
-                    let hostname = match &rule.host {
-                        Some(host) => host.to_string(),
-                        None => "@".to_string(),
-                    };
+                    if !ctx.disable_dns.unwrap_or_default() {
+                        let hostname = match &rule.host {
+                            Some(host) => host.to_string(),
+                            None => "@".to_string(),
+                        };
 
-                    let Some(dns_record) = cloudflare_client
-                        .find_dns_record(&clustertunnel.spec.cloudflare.zone_id, &hostname)
-                        .await?
-                    else {
-                        continue;
-                    };
+                        let Some(dns_record) = cloudflare_client
+                            .find_dns_record(&clustertunnel.spec.cloudflare.zone_id, &hostname)
+                            .await?
+                        else {
+                            continue;
+                        };
 
-                    cloudflare_client
-                        .delete_dns_record(&clustertunnel.spec.cloudflare.zone_id, &dns_record.id)
-                        .await?;
+                        cloudflare_client
+                            .delete_dns_record(
+                                &clustertunnel.spec.cloudflare.zone_id,
+                                &dns_record.id,
+                            )
+                            .await?;
+                    }
                 }
 
                 let config_yaml = serde_yaml::to_string(&config).unwrap();

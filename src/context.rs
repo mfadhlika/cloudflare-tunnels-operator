@@ -1,4 +1,5 @@
 pub struct Context {
     pub kube_cli: kube::Client,
     pub ingress_class: Option<String>,
+    pub disable_dns: Option<bool>,
 }

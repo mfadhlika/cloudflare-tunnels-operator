@@ -9,6 +9,8 @@ use log::info;
 struct Args {
     #[arg(long)]
     ingress_class: Option<String>,
+    #[arg(long)]
+    disable_dns: Option<bool>,
 }
 
 #[get("/health")]
@@ -29,6 +31,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let ctx = Arc::new(Context {
         kube_cli,
         ingress_class: args.ingress_class.clone(),
+        disable_dns: args.disable_dns,
     });
 
     let clustertunnel = controller::clustertunnel::run(ctx.clone());
