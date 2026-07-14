@@ -11,6 +11,8 @@ struct Args {
     ingress_class: Option<String>,
     #[arg(long)]
     disable_dns: Option<bool>,
+    #[arg(long)]
+    owner: Option<String>,
 }
 
 #[get("/health")]
@@ -32,6 +34,7 @@ async fn main() -> Result<(), anyhow::Error> {
         kube_cli,
         ingress_class: args.ingress_class.clone(),
         disable_dns: args.disable_dns,
+        owner: args.owner,
     });
 
     let clustertunnel = controller::clustertunnel::run(ctx.clone());

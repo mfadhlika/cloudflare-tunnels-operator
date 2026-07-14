@@ -76,20 +76,52 @@ impl Client {
         Ok(())
     }
 
-    pub async fn create_dns_record(
+    pub async fn create_cname_record(
         &self,
         zone_id: &str,
         hostname: &str,
         content: &str,
+    ) -> Result<(), Error> {
+        return self
+            .create_dns_record(
+                zone_id,
+                hostname,
+                cloudflare::endpoints::dns::dns::DnsContent::CNAME {
+                    content: content.to_string(),
+                },
+            )
+            .await;
+    }
+
+    pub async fn create_txt_record(
+        &self,
+        zone_id: &str,
+        hostname: &str,
+        content: &str,
+    ) -> Result<(), Error> {
+        return self
+            .create_dns_record(
+                zone_id,
+                hostname,
+                cloudflare::endpoints::dns::dns::DnsContent::TXT {
+                    content: content.to_string(),
+                },
+            )
+            .await;
+    }
+
+    pub async fn create_dns_record(
+        &self,
+        zone_id: &str,
+        hostname: &str,
+        content: cloudflare::endpoints::dns::dns::DnsContent,
     ) -> Result<(), Error> {
         let endpoint = cloudflare::endpoints::dns::dns::CreateDnsRecord {
             zone_identifier: zone_id,
             params: cloudflare::endpoints::dns::dns::CreateDnsRecordParams {
                 proxied: Some(true),
                 name: hostname,
-                content: cloudflare::endpoints::dns::dns::DnsContent::CNAME {
-                    content: content.to_string(),
-                },
+                content,
                 ttl: None,
                 priority: None,
             },
@@ -100,12 +132,31 @@ impl Client {
         Ok(())
     }
 
+    pub async fn update_cname_record(
+        &self,
+        zone_id: &str,
+        domain_id: &str,
+        hostname: &str,
+        content: &str,
+    ) -> Result<(), Error> {
+        return self
+            .update_dns_record(
+                zone_id,
+                domain_id,
+                hostname,
+                cloudflare::endpoints::dns::dns::DnsContent::CNAME {
+                    content: content.to_string(),
+                },
+            )
+            .await;
+    }
+
     pub async fn update_dns_record(
         &self,
         zone_id: &str,
         domain_id: &str,
         hostname: &str,
-        tunnel_id: &str,
+        content: cloudflare::endpoints::dns::dns::DnsContent,
     ) -> Result<(), Error> {
         let endpoint = cloudflare::endpoints::dns::dns::UpdateDnsRecord {
             zone_identifier: zone_id,
@@ -113,9 +164,7 @@ impl Client {
             params: cloudflare::endpoints::dns::dns::UpdateDnsRecordParams {
                 proxied: Some(true),
                 name: hostname,
-                content: cloudflare::endpoints::dns::dns::DnsContent::CNAME {
-                    content: format!("{tunnel_id}.cfargotunnel.com"),
-                },
+                content,
                 ttl: None,
             },
         };
@@ -129,7 +178,7 @@ impl Client {
         &self,
         zone_id: &str,
         hostname: &str,
-    ) -> Result<Option<DnsRecord>, Error> {
+    ) -> Result<Vec<DnsRecord>, Error> {
         let endpoint = cloudflare::endpoints::dns::dns::ListDnsRecords {
             zone_identifier: zone_id,
             params: cloudflare::endpoints::dns::dns::ListDnsRecordsParams {
@@ -140,7 +189,7 @@ impl Client {
 
         let response = self.client.request(&endpoint).await?;
 
-        Ok(response.result.into_iter().find(|rec| rec.name == hostname))
+        Ok(response.result)
     }
 
     pub async fn delete_dns_record(&self, zone_id: &str, domain_id: &str) -> Result<(), Error> {

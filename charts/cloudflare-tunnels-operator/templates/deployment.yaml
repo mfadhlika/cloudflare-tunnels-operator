@@ -34,8 +34,10 @@ spec:
             - "/app/cloudflare-tunnels-operator"
             {{- if .Values.ingressClass.enabled }}
             - "--ingress-class"
-            - "{{ include "cloudflare-tunnels-operator.ingressClassName" . }}"
+            - "{{ include "cloudflare-tunnels-operator.ingressClass.name" . }}"
             {{- end }}
+            - "--owner"
+            - "{{ include "cloudflare-tunnels-operator.owner.name" . }}"
           env:
           - name: POD_NAMESPACE
             valueFrom:
