@@ -34,12 +34,26 @@ spec:
             - "/app/cloudflare-tunnels-operator"
             {{- if .Values.ingressClass.enabled }}
             - "--ingress-class"
-            - "{{ include "cloudflare-tunnels-operator.ingressClass.name" . }}"
+            - "{{ include "cloudflare-tunnels-operator.ingressClassName" . }}"
             {{- end }}
             - "--owner"
-            - "{{ include "cloudflare-tunnels-operator.owner.name" . }}"
+            - "{{ .Values.owner.name }}"
+            - "--cloudflare-account-id"
+            - "{{ .Values.cloudflare.accountId }}"
+            - "--cloudflare-zone-id"
+            - "{{ .Values.cloudflare.zoneId }}"
+            {{- if .Values.cloudflare.apiTokenSecretRef }}
+            - "--cloudflare-auth-token"
+            - "$(CLOUDFLARE_TOKEN)"
+            {{- end }}
+            {{- if .Values.cloudflare.apiAuthKeySecretRef }}
+            -- "--cloudflare-email"
+            - "{{ .Values.cloudflare.email }}"
+            - "--cloudflare-auth-token"
+            - "$(CLOUDFLARE_API_KEY)"
+            {{- end }}
             {{- if .Values.cloudflared.tag }}
-            - "--clouflared-version"
+            - "--cloudflared-version"
             - "{{ include "cloudflare-tunnels-operator.cloudflared.tag" . }}"
             {{- end }}
           env:
@@ -49,6 +63,16 @@ spec:
                 fieldPath: metadata.namespace
           - name: RUST_LOG
             value: cloudflare_tunnels_operator={{ .Values.logLevel }}
+          {{- if .Values.cloudflare.apiTokenSecretRef }}
+          - name: CLOUDFLARE_TOKEN
+            valueFrom:
+              secretKeyRef: {{- toYaml .Values.cloudflare.apiTokenSecretRef | nindent 16 }}
+          {{- end }}
+          {{- if .Values.cloudflare.apiAuthKeySecretRef }}
+          - name: CLOUDFLARE_API_KEY
+            valueFrom:
+              secretKeyRef: {{- toYaml .Values.cloudflare.apiAuthKeySecretRef | nindent 16  }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 2000

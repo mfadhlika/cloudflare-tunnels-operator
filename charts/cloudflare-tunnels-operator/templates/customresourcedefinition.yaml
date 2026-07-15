@@ -20,44 +20,6 @@ spec:
         properties:
           spec:
             properties:
-              cloudflare:
-                oneOf:
-                - required:
-                  - apiKeySecretRef
-                - required:
-                  - apiTokenSecretRef
-                properties:
-                  accountId:
-                    type: string
-                  apiKeySecretRef:
-                    properties:
-                      key:
-                        type: string
-                      name:
-                        type: string
-                    required:
-                    - key
-                    - name
-                    type: object
-                  apiTokenSecretRef:
-                    properties:
-                      key:
-                        type: string
-                      name:
-                        type: string
-                    required:
-                    - key
-                    - name
-                    type: object
-                  email:
-                    nullable: true
-                    type: string
-                  zoneId:
-                    type: string
-                required:
-                - accountId
-                - zoneId
-                type: object
               cloudflared:
                 nullable: true
                 properties:
@@ -96,8 +58,6 @@ spec:
                 - key
                 - name
                 type: object
-            required:
-            - cloudflare
             type: object
         required:
         - spec

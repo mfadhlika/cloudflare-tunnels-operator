@@ -51,7 +51,6 @@ async fn patch_deployment(deploy_api: &Api<Deployment>, hash: String) -> Result<
 async fn upsert_dns_record(
     rule: &IngressRule,
     cloudflare_client: &CloudflareClient,
-    clustertunnel: &ClusterTunnel,
     config: &TunnelConfig,
     txt: &str,
 ) -> Result<(), Error> {
@@ -63,9 +62,7 @@ async fn upsert_dns_record(
     let cname_record_content = format!("{}.cfargotunnel.com", config.tunnel);
 
     // list all dns record with the hostname
-    let dns_records = cloudflare_client
-        .find_dns_record(&clustertunnel.spec.cloudflare.zone_id, &hostname)
-        .await?;
+    let dns_records = cloudflare_client.find_dns_record(&hostname).await?;
 
     // find cname and all txt records
     let mut cname_record = None;
@@ -81,32 +78,21 @@ async fn upsert_dns_record(
     }
 
     if !txt_record_found {
-        cloudflare_client
-            .create_txt_record(&clustertunnel.spec.cloudflare.zone_id, &hostname, &txt)
-            .await?;
+        cloudflare_client.create_txt_record(&hostname, &txt).await?;
     }
 
     match cname_record {
         Some(record) => match record.content {
             DnsContent::CNAME { content } if content != cname_record_content => {
                 cloudflare_client
-                    .update_cname_record(
-                        &clustertunnel.spec.cloudflare.zone_id,
-                        &record.id,
-                        &hostname,
-                        &cname_record_content,
-                    )
+                    .update_cname_record(&record.id, &hostname, &cname_record_content)
                     .await?;
             }
             _ => {}
         },
         None => {
             cloudflare_client
-                .create_cname_record(
-                    &clustertunnel.spec.cloudflare.zone_id,
-                    &hostname,
-                    &cname_record_content,
-                )
+                .create_cname_record(&hostname, &cname_record_content)
                 .await?;
         }
     }
@@ -117,7 +103,6 @@ async fn upsert_dns_record(
 async fn cleanup_dns_records(
     rule: &IngressRule,
     cloudflare_client: &CloudflareClient,
-    clustertunnel: &ClusterTunnel,
     txt: &str,
 ) -> Result<(), Error> {
     let hostname = match &rule.host {
@@ -126,9 +111,7 @@ async fn cleanup_dns_records(
     };
 
     // list all dns record with the hostname
-    let dns_records = cloudflare_client
-        .find_dns_record(&clustertunnel.spec.cloudflare.zone_id, &hostname)
-        .await?;
+    let dns_records = cloudflare_client.find_dns_record(&hostname).await?;
 
     // find cname and all txt records
     let mut cname_record = None;
@@ -149,18 +132,14 @@ async fn cleanup_dns_records(
 
     // if txt record found and match, delete the record
     if let Some(record) = txt_record {
-        cloudflare_client
-            .delete_dns_record(&clustertunnel.spec.cloudflare.zone_id, &record.id)
-            .await?;
+        cloudflare_client.delete_dns_record(&record.id).await?;
         txt_record_count -= 1;
     }
 
     // if there's no txt record anymore, delete the cname record
     if txt_record_count == 0 {
         if let Some(record) = cname_record {
-            cloudflare_client
-                .delete_dns_record(&clustertunnel.spec.cloudflare.zone_id, &record.id)
-                .await?;
+            cloudflare_client.delete_dns_record(&record.id).await?;
         }
     }
 
@@ -217,17 +196,7 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
         .and_then(|cfg| serde_yaml::from_str::<TunnelConfig>(cfg).ok())
         .ok_or_else(|| anyhow!("no data"))?;
 
-    let clustertunnels = ct_api.list(&ListParams::default()).await?;
-    let Some(clustertunnel) = clustertunnels.items.first() else {
-        return Err(anyhow!("no cluster tunnel available").into());
-    };
-
-    let cloudflare_creds =
-        get_credentials(ctx.clone(), &ns, &clustertunnel.spec.cloudflare).await?;
-    let cloudflare_client = CloudflareClient::new(
-        clustertunnel.spec.cloudflare.account_id.clone(),
-        cloudflare_creds,
-    )?;
+    let cloudflare_client = &ctx.cloudflare_client;
 
     let name = "cloudflare-tunnels-operator".to_string();
     let owner = ctx.owner.clone().unwrap_or("default".to_string());
@@ -325,7 +294,6 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                         if let Err(err) = upsert_dns_record(
                             rule,
                             &cloudflare_client,
-                            clustertunnel,
                             &config,
                             &txt_record_content,
                         )
@@ -413,13 +381,8 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                     }
 
                     if !ctx.disable_dns.unwrap_or_default() {
-                        if let Err(err) = cleanup_dns_records(
-                            rule,
-                            &cloudflare_client,
-                            clustertunnel,
-                            &txt_record_content,
-                        )
-                        .await
+                        if let Err(err) =
+                            cleanup_dns_records(rule, &cloudflare_client, &txt_record_content).await
                         {
                             error!("failed to clean up dns records: {err}");
                         }

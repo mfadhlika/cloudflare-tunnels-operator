@@ -23,7 +23,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cloudflare::{self, TunnelConfig, TunnelCredentials, TunnelIngress},
+    cloudflare::{TunnelConfig, TunnelCredentials, TunnelIngress},
     context::Context,
     error::Error,
 };
@@ -37,34 +37,6 @@ const CLUSTER_TUNNEL_FINALIZER: &str = "cluster-tunnel.cloudflare-tunnels.io/fin
 pub struct SecretRef {
     pub name: String,
     pub key: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub enum CloudflareSecretRef {
-    #[serde(rename = "apiKeySecretRef")]
-    ApiKey(SecretRef),
-    #[serde(rename = "apiTokenSecretRef")]
-    ApiToken(SecretRef),
-}
-
-impl CloudflareSecretRef {
-    pub fn secret_ref(&self) -> &SecretRef {
-        match self {
-            CloudflareSecretRef::ApiKey(secret_ref) => secret_ref,
-            CloudflareSecretRef::ApiToken(secret_ref) => secret_ref,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct CloudflareCredentials {
-    pub account_id: String,
-    pub zone_id: String,
-    pub email: Option<String>,
-    #[serde(flatten)]
-    pub secret_ref: CloudflareSecretRef,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, JsonSchema)]
@@ -110,7 +82,6 @@ pub struct ClusterTunnelSpec {
     pub name: Option<String>,
     pub tunnel_secret_ref: Option<SecretRef>,
     pub origin_cert_secret_ref: Option<SecretRef>,
-    pub cloudflare: CloudflareCredentials,
     pub cloudflared: Option<CloudflaredConfig>,
 }
 
@@ -357,56 +328,8 @@ impl ClusterTunnel {
         Ok(())
     }
 
-    pub async fn get_credentials(
-        &self,
-        ctx: Arc<Context>,
-    ) -> Result<cloudflare::Credentials, Error> {
-        let ns = std::env::var("POD_NAMESPACE").unwrap_or_else(|_| "default".to_string());
-        let kube_cli = ctx.kube_cli.clone();
-
-        let secret_api: Api<Secret> = Api::namespaced(kube_cli.clone(), &ns);
-
-        let secret_ref = match &self.spec.cloudflare.secret_ref {
-            CloudflareSecretRef::ApiKey(secret_ref) => secret_ref,
-            CloudflareSecretRef::ApiToken(secret_ref) => secret_ref,
-        };
-
-        let secret = secret_api.get(&secret_ref.name).await?;
-        let data = secret.data.ok_or_else(|| anyhow!("no data"))?;
-        let value = data.get(&secret_ref.key).ok_or_else(|| {
-            anyhow!(
-                "key {} not found or invalid in {}",
-                secret_ref.key,
-                secret_ref.name
-            )
-        })?;
-
-        let value = String::from_utf8(value.clone().0)
-            .map_err(|err| anyhow!("value not a string: {err:?}"))?;
-
-        let creds = match &self.spec.cloudflare.secret_ref {
-            CloudflareSecretRef::ApiKey(_) => {
-                let Some(email) = &self.spec.cloudflare.email else {
-                    return Err(anyhow!("api key requires email").into());
-                };
-
-                cloudflare::Credentials::UserAuthKey {
-                    email: email.to_owned(),
-                    key: value,
-                }
-            }
-            CloudflareSecretRef::ApiToken(_) => {
-                cloudflare::Credentials::UserAuthToken { token: value }
-            }
-        };
-
-        Ok(creds)
-    }
-
     pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action, Error> {
-        let credentials = self.get_credentials(ctx.clone()).await?;
-
-        let cf_cli = cloudflare::Client::new(self.spec.cloudflare.account_id.clone(), credentials)?;
+        let cf_cli = &ctx.cloudflare_client;
 
         let tunnel_name = self.spec.name.clone().unwrap_or_else(|| self.name_any());
         let tunnel_credentials = if let Some(tunnel_id) = cf_cli.find_tunnel(&tunnel_name).await? {
@@ -446,9 +369,7 @@ impl ClusterTunnel {
     }
 
     pub async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action, Error> {
-        let credentials = self.get_credentials(ctx.clone()).await?;
-
-        let cf_cli = cloudflare::Client::new(self.spec.cloudflare.account_id.clone(), credentials)?;
+        let cf_cli = &ctx.cloudflare_client;
 
         let tunnel_name = self.spec.name.clone().unwrap_or_else(|| self.name_any());
         let Some(tunnel_id) = cf_cli.find_tunnel(&tunnel_name).await? else {
