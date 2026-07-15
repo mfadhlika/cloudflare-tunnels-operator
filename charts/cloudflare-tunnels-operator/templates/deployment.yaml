@@ -38,6 +38,10 @@ spec:
             {{- end }}
             - "--owner"
             - "{{ include "cloudflare-tunnels-operator.owner.name" . }}"
+            {{- if .Values.cloudflared.tag }}
+            - "--clouflared-version"
+            - "{{ include "cloudflare-tunnels-operator.cloudflared.tag" . }}"
+            {{- end }}
           env:
           - name: POD_NAMESPACE
             valueFrom:

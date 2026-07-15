@@ -281,7 +281,10 @@ impl ClusterTunnel {
                         ]),
                         containers: vec![Container {
                             name: "cloudflared".to_string(),
-                            image: Some("cloudflare/cloudflared:2026.2.0".to_string()),
+                            image: Some(format!(
+                                "cloudflare/cloudflared:{}",
+                                &ctx.cloudflared_version
+                            )),
                             args: Some(vec![
                                 "tunnel".to_string(),
                                 "--no-autoupdate".to_string(),

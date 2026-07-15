@@ -24,6 +24,9 @@ ingressClass:
 owner:
   name: default
 
+cloudflared: {}
+#  tag: 2026.2.0
+
 serviceAccount:
   # Specifies whether a service account should be created
   create: true

@@ -13,6 +13,8 @@ struct Args {
     disable_dns: Option<bool>,
     #[arg(long)]
     owner: Option<String>,
+    #[arg(long, default_value = "2026.2.0")]
+    cloudflared_version: String,
 }
 
 #[get("/health")]
@@ -35,6 +37,7 @@ async fn main() -> Result<(), anyhow::Error> {
         ingress_class: args.ingress_class.clone(),
         disable_dns: args.disable_dns,
         owner: args.owner,
+        cloudflared_version: args.cloudflared_version,
     });
 
     let clustertunnel = controller::clustertunnel::run(ctx.clone());
