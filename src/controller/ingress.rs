@@ -80,26 +80,21 @@ async fn upsert_dns_record(
         }
     }
 
-    if !txt_record_found {
-        cloudflare_client.create_txt_record(&hostname, &txt).await?;
-    }
     match cname_record {
         Some(record) => match record.content {
             DnsContent::CNAME { content } => {
-                if content != cname {
-                    if !other_txt_record_found {
-                        if !txt_record_found {
-                            cloudflare_client.create_txt_record(&hostname, &txt).await?;
-                        }
-
-                        cloudflare_client
-                            .update_cname_record(&record.id, &hostname, cname)
-                            .await?;
-                    } else {
-                        return Err(Error::Other(anyhow!(
-                            "CNAME record set to another tunnel, maybe set by another tunnel. If you think that's not the case, manually delete the record from Cloudflare dashboard"
-                        )));
+                if content == cname && !other_txt_record_found {
+                    if !txt_record_found {
+                        cloudflare_client.create_txt_record(&hostname, &txt).await?;
                     }
+                } else if content != cname && !other_txt_record_found {
+                    cloudflare_client
+                        .update_cname_record(&record.id, &hostname, cname)
+                        .await?;
+                } else {
+                    return Err(Error::Other(anyhow!(
+                        "CNAME record set to another tunnel, maybe set by another tunnel. If you think that's not the case, manually delete the record from Cloudflare dashboard"
+                    )));
                 }
             }
             _ => {}
@@ -140,7 +135,7 @@ async fn cleanup_dns_records(
             DnsContent::CNAME { .. } => cname_record = Some(record),
             DnsContent::TXT { content } => {
                 txt_record_count += 1;
-                if content.eq(&txt) {
+                if content == txt {
                     txt_record = Some(record);
                 }
             }
@@ -557,9 +552,9 @@ mod tests {
             .create_async()
             .await;
 
-        let _ = setup_create_dns_mock(&mut server, "TXT", txt).await;
+        let create_txt_mock = setup_create_dns_mock(&mut server, "TXT", txt).await;
 
-        let _ = setup_create_dns_mock(&mut server, "CNAME", cname).await;
+        let create_cname_mock = setup_create_dns_mock(&mut server, "CNAME", cname).await;
 
         let cloudflare_client = crate::cloudflare::Client::new(
             "test-account".to_string(),
@@ -594,6 +589,9 @@ mod tests {
         if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
             assert!(false, "failed to upsert dns record: {err:?}");
         }
+
+        create_txt_mock.assert_async().await;
+        create_cname_mock.assert_async().await;
     }
 
     #[tokio::test]
@@ -654,7 +652,7 @@ mod tests {
             .create_async()
             .await;
 
-        let _ = setup_create_dns_mock(&mut server, "TXT", txt).await;
+        let create_txt_mock = setup_create_dns_mock(&mut server, "TXT", txt).await;
 
         let cloudflare_client = crate::cloudflare::Client::new(
             "test-account".to_string(),
@@ -689,6 +687,8 @@ mod tests {
         if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
             assert!(false, "failed to upsert dns record: {err:?}");
         }
+
+        create_txt_mock.assert_async().await;
     }
 
     #[tokio::test]
@@ -749,7 +749,7 @@ mod tests {
             .create_async()
             .await;
 
-        let _ = setup_create_dns_mock(&mut server, "CNAME", cname).await;
+        let create_cname_mock = setup_create_dns_mock(&mut server, "CNAME", cname).await;
 
         let cloudflare_client = crate::cloudflare::Client::new(
             "test-account".to_string(),
@@ -784,6 +784,8 @@ mod tests {
         if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
             assert!(false, "failed to upsert dns record: {err:?}");
         }
+
+        create_cname_mock.assert_async().await;
     }
 
     #[tokio::test]
@@ -1029,5 +1031,340 @@ mod tests {
 
         let res = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await;
         assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_dns_record() {
+        let cname = "test-cname";
+        let txt = "test-txt";
+
+        let mut server = mockito::Server::new_async().await;
+
+        // Use one of these addresses to configure your client
+        let url = server.url();
+
+        // Create a mock
+        let _ = server
+            .mock("GET", "/zones/test-zone/dns_records?name=test.example.com")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "errors": [],
+                    "messages": [],
+                    "success": true,
+                    "result": [
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "CNAME",
+                          "comment": "Domain verification record",
+                          "content": cname,
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        },
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "TXT",
+                          "comment": "Domain verification record",
+                          "content": txt,
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c354",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        }
+                    ]
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let delete_cname_mock = server
+            .mock(
+                "DELETE",
+                "/zones/test-zone/dns_records/023e105f4ecef8ad9ca31a8372d0c353",
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "result": {
+                      "id": "023e105f4ecef8ad9ca31a8372d0c353"
+                    }
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let delete_txt_mock = server
+            .mock(
+                "DELETE",
+                "/zones/test-zone/dns_records/023e105f4ecef8ad9ca31a8372d0c354",
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "result": {
+                      "id": "023e105f4ecef8ad9ca31a8372d0c353"
+                    }
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let cloudflare_client = crate::cloudflare::Client::new(
+            "test-account".to_string(),
+            "test-zone".to_string(),
+            crate::cloudflare::Credentials::UserAuthToken {
+                token: "token".to_string(),
+            },
+            crate::cloudflare::Environment::Custom(url),
+        )
+        .unwrap();
+
+        let rule = IngressRule {
+            host: Some("test.example.com".to_string()),
+            http: Some(HTTPIngressRuleValue {
+                paths: vec![HTTPIngressPath {
+                    backend: IngressBackend {
+                        service: Some(IngressServiceBackend {
+                            name: "test".to_string(),
+                            port: Some(ServiceBackendPort {
+                                name: Some("http".to_string()),
+                                ..Default::default()
+                            }),
+                        }),
+                        ..Default::default()
+                    },
+                    path: Some("/".to_string()),
+                    path_type: "Prefix".to_string(),
+                }],
+            }),
+        };
+
+        if let Err(err) = cleanup_dns_records(&rule, &cloudflare_client, txt).await {
+            assert!(false, "failed to cleanup dns record: {err:?}");
+        }
+
+        delete_cname_mock.assert_async().await;
+        delete_txt_mock.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_delete_dns_record_on_multiple_txt_records() {
+        let cname = "test-cname";
+        let txt = "test-txt";
+
+        let mut server = mockito::Server::new_async().await;
+
+        // Use one of these addresses to configure your client
+        let url = server.url();
+
+        // Create a mock
+        let _ = server
+            .mock("GET", "/zones/test-zone/dns_records?name=test.example.com")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "errors": [],
+                    "messages": [],
+                    "success": true,
+                    "result": [
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "CNAME",
+                          "comment": "Domain verification record",
+                          "content": cname,
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        },
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "TXT",
+                          "comment": "Domain verification record",
+                          "content": txt,
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c354",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        },
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "TXT",
+                          "comment": "Domain verification record",
+                          "content": "different-txt",
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c355",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        }
+                    ]
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let delete_txt_mock = server
+            .mock(
+                "DELETE",
+                "/zones/test-zone/dns_records/023e105f4ecef8ad9ca31a8372d0c354",
+            )
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "result": {
+                      "id": "023e105f4ecef8ad9ca31a8372d0c354"
+                    }
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let cloudflare_client = crate::cloudflare::Client::new(
+            "test-account".to_string(),
+            "test-zone".to_string(),
+            crate::cloudflare::Credentials::UserAuthToken {
+                token: "token".to_string(),
+            },
+            crate::cloudflare::Environment::Custom(url),
+        )
+        .unwrap();
+
+        let rule = IngressRule {
+            host: Some("test.example.com".to_string()),
+            http: Some(HTTPIngressRuleValue {
+                paths: vec![HTTPIngressPath {
+                    backend: IngressBackend {
+                        service: Some(IngressServiceBackend {
+                            name: "test".to_string(),
+                            port: Some(ServiceBackendPort {
+                                name: Some("http".to_string()),
+                                ..Default::default()
+                            }),
+                        }),
+                        ..Default::default()
+                    },
+                    path: Some("/".to_string()),
+                    path_type: "Prefix".to_string(),
+                }],
+            }),
+        };
+
+        if let Err(err) = cleanup_dns_records(&rule, &cloudflare_client, txt).await {
+            assert!(false, "failed to cleanup dns record: {err:?}");
+        }
+
+        delete_txt_mock.assert_async().await;
     }
 }
