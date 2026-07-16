@@ -2,16 +2,16 @@ apiVersion: v1
 entries:
   cloudflare-tunnels-operator:
   - apiVersion: v2
-    appVersion: 0.4.0-alpha.0
-    created: "2026-07-16T06:07:03.961757516Z"
+    appVersion: 0.4.0-alpha.1
+    created: "2026-07-16T06:24:17.631463201Z"
     description: A Kubernetes Operator for exposing service with Cloudflare Tunnels
       using Ingress resources
-    digest: dd30770fb2c91f5040defae721ff3a8eda7ed962279f548704b8581c2e4bc544
+    digest: f3f91d52ec746df24fade22a522b6e3ef54f1279bbdb345438b02c7f20cf398d
     name: cloudflare-tunnels-operator
     type: application
     urls:
-    - https://github.com/mfadhlika/cloudflare-tunnels-operator/releases/download/cloudflare-tunnels-operator-0.4.0-alpha.0/cloudflare-tunnels-operator-0.4.0-alpha.0.tgz
-    version: 0.4.0-alpha.0
+    - https://github.com/mfadhlika/cloudflare-tunnels-operator/releases/download/cloudflare-tunnels-operator-0.4.0-alpha.1/cloudflare-tunnels-operator-0.4.0-alpha.1.tgz
+    version: 0.4.0-alpha.1
   - apiVersion: v2
     appVersion: 0.4.0-alpha.0
     created: "2026-07-14T10:57:55.345304983Z"
@@ -29,6 +29,17 @@ entries:
     description: A Kubernetes Operator for exposing service with Cloudflare Tunnels
       using Ingress resources
     digest: 8bd8f75b4e480f72ef9b485661e314b84ca9a7f4555fd81ba2d228f5550922ac
+    name: cloudflare-tunnels-operator
+    type: application
+    urls:
+    - https://github.com/mfadhlika/cloudflare-tunnels-operator/releases/download/cloudflare-tunnels-operator-0.4.0-alpha.0/cloudflare-tunnels-operator-0.4.0-alpha.0.tgz
+    version: 0.4.0-alpha.0
+  - apiVersion: v2
+    appVersion: 0.4.0-alpha.0
+    created: "2026-07-16T06:07:03.961757516Z"
+    description: A Kubernetes Operator for exposing service with Cloudflare Tunnels
+      using Ingress resources
+    digest: dd30770fb2c91f5040defae721ff3a8eda7ed962279f548704b8581c2e4bc544
     name: cloudflare-tunnels-operator
     type: application
     urls:
@@ -232,4 +243,4 @@ entries:
     urls:
     - https://github.com/mfadhlika/cloudflare-tunnels-operator/releases/download/cloudflare-tunnels-operator-0.1.0/cloudflare-tunnels-operator-0.1.0.tgz
     version: 0.1.0
-generated: "2026-07-16T06:07:03.96198435Z"
+generated: "2026-07-16T06:24:17.631693422Z"
