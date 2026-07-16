@@ -468,6 +468,28 @@ mod tests {
 
     use super::*;
 
+    fn setup_rule() -> IngressRule {
+        return IngressRule {
+            host: Some("test.example.com".to_string()),
+            http: Some(HTTPIngressRuleValue {
+                paths: vec![HTTPIngressPath {
+                    backend: IngressBackend {
+                        service: Some(IngressServiceBackend {
+                            name: "test".to_string(),
+                            port: Some(ServiceBackendPort {
+                                name: Some("http".to_string()),
+                                ..Default::default()
+                            }),
+                        }),
+                        ..Default::default()
+                    },
+                    path: Some("/".to_string()),
+                    path_type: "Prefix".to_string(),
+                }],
+            }),
+        };
+    }
+
     async fn setup_create_dns_mock(
         server: &mut ServerGuard,
         record_type: &str,
@@ -566,25 +588,7 @@ mod tests {
         )
         .unwrap();
 
-        let rule = IngressRule {
-            host: Some("test.example.com".to_string()),
-            http: Some(HTTPIngressRuleValue {
-                paths: vec![HTTPIngressPath {
-                    backend: IngressBackend {
-                        service: Some(IngressServiceBackend {
-                            name: "test".to_string(),
-                            port: Some(ServiceBackendPort {
-                                name: Some("http".to_string()),
-                                ..Default::default()
-                            }),
-                        }),
-                        ..Default::default()
-                    },
-                    path: Some("/".to_string()),
-                    path_type: "Prefix".to_string(),
-                }],
-            }),
-        };
+        let rule = setup_rule();
 
         if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
             assert!(false, "failed to upsert dns record: {err:?}");
@@ -664,25 +668,7 @@ mod tests {
         )
         .unwrap();
 
-        let rule = IngressRule {
-            host: Some("test.example.com".to_string()),
-            http: Some(HTTPIngressRuleValue {
-                paths: vec![HTTPIngressPath {
-                    backend: IngressBackend {
-                        service: Some(IngressServiceBackend {
-                            name: "test".to_string(),
-                            port: Some(ServiceBackendPort {
-                                name: Some("http".to_string()),
-                                ..Default::default()
-                            }),
-                        }),
-                        ..Default::default()
-                    },
-                    path: Some("/".to_string()),
-                    path_type: "Prefix".to_string(),
-                }],
-            }),
-        };
+        let rule = setup_rule();
 
         if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
             assert!(false, "failed to upsert dns record: {err:?}");
@@ -761,25 +747,7 @@ mod tests {
         )
         .unwrap();
 
-        let rule = IngressRule {
-            host: Some("test.example.com".to_string()),
-            http: Some(HTTPIngressRuleValue {
-                paths: vec![HTTPIngressPath {
-                    backend: IngressBackend {
-                        service: Some(IngressServiceBackend {
-                            name: "test".to_string(),
-                            port: Some(ServiceBackendPort {
-                                name: Some("http".to_string()),
-                                ..Default::default()
-                            }),
-                        }),
-                        ..Default::default()
-                    },
-                    path: Some("/".to_string()),
-                    path_type: "Prefix".to_string(),
-                }],
-            }),
-        };
+        let rule = setup_rule();
 
         if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
             assert!(false, "failed to upsert dns record: {err:?}");
@@ -886,25 +854,7 @@ mod tests {
         )
         .unwrap();
 
-        let rule = IngressRule {
-            host: Some("test.example.com".to_string()),
-            http: Some(HTTPIngressRuleValue {
-                paths: vec![HTTPIngressPath {
-                    backend: IngressBackend {
-                        service: Some(IngressServiceBackend {
-                            name: "test".to_string(),
-                            port: Some(ServiceBackendPort {
-                                name: Some("http".to_string()),
-                                ..Default::default()
-                            }),
-                        }),
-                        ..Default::default()
-                    },
-                    path: Some("/".to_string()),
-                    path_type: "Prefix".to_string(),
-                }],
-            }),
-        };
+        let rule = setup_rule();
 
         if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
             assert!(false, "failed to upsert dns record: {err:?}");
@@ -1009,25 +959,7 @@ mod tests {
         )
         .unwrap();
 
-        let rule = IngressRule {
-            host: Some("test.example.com".to_string()),
-            http: Some(HTTPIngressRuleValue {
-                paths: vec![HTTPIngressPath {
-                    backend: IngressBackend {
-                        service: Some(IngressServiceBackend {
-                            name: "test".to_string(),
-                            port: Some(ServiceBackendPort {
-                                name: Some("http".to_string()),
-                                ..Default::default()
-                            }),
-                        }),
-                        ..Default::default()
-                    },
-                    path: Some("/".to_string()),
-                    path_type: "Prefix".to_string(),
-                }],
-            }),
-        };
+        let rule = setup_rule();
 
         let res = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await;
         assert!(res.is_err());
@@ -1167,25 +1099,7 @@ mod tests {
         )
         .unwrap();
 
-        let rule = IngressRule {
-            host: Some("test.example.com".to_string()),
-            http: Some(HTTPIngressRuleValue {
-                paths: vec![HTTPIngressPath {
-                    backend: IngressBackend {
-                        service: Some(IngressServiceBackend {
-                            name: "test".to_string(),
-                            port: Some(ServiceBackendPort {
-                                name: Some("http".to_string()),
-                                ..Default::default()
-                            }),
-                        }),
-                        ..Default::default()
-                    },
-                    path: Some("/".to_string()),
-                    path_type: "Prefix".to_string(),
-                }],
-            }),
-        };
+        let rule = setup_rule();
 
         if let Err(err) = cleanup_dns_records(&rule, &cloudflare_client, txt).await {
             assert!(false, "failed to cleanup dns record: {err:?}");
@@ -1341,25 +1255,7 @@ mod tests {
         )
         .unwrap();
 
-        let rule = IngressRule {
-            host: Some("test.example.com".to_string()),
-            http: Some(HTTPIngressRuleValue {
-                paths: vec![HTTPIngressPath {
-                    backend: IngressBackend {
-                        service: Some(IngressServiceBackend {
-                            name: "test".to_string(),
-                            port: Some(ServiceBackendPort {
-                                name: Some("http".to_string()),
-                                ..Default::default()
-                            }),
-                        }),
-                        ..Default::default()
-                    },
-                    path: Some("/".to_string()),
-                    path_type: "Prefix".to_string(),
-                }],
-            }),
-        };
+        let rule = setup_rule();
 
         if let Err(err) = cleanup_dns_records(&rule, &cloudflare_client, txt).await {
             assert!(false, "failed to cleanup dns record: {err:?}");
