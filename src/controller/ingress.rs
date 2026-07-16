@@ -82,32 +82,28 @@ async fn upsert_dns_record(
 
     match cname_record {
         Some(record) => match record.content {
-            DnsContent::CNAME { content } => {
-                if content == cname && !other_txt_record_found {
-                    if !txt_record_found {
-                        cloudflare_client.create_txt_record(&hostname, &txt).await?;
-                    }
-                } else if content != cname && !other_txt_record_found {
-                    cloudflare_client
-                        .update_cname_record(&record.id, &hostname, cname)
-                        .await?;
-                } else {
+            DnsContent::CNAME { content } if content != cname => {
+                if other_txt_record_found {
                     return Err(Error::Other(anyhow!(
                         "CNAME record set to another tunnel, maybe set by another tunnel. If you think that's not the case, manually delete the record from Cloudflare dashboard"
                     )));
                 }
+
+                cloudflare_client
+                    .update_cname_record(&record.id, &hostname, cname)
+                    .await?;
             }
             _ => {}
         },
         None => {
-            if !txt_record_found {
-                cloudflare_client.create_txt_record(&hostname, &txt).await?;
-            }
-
             cloudflare_client
                 .create_cname_record(&hostname, cname)
                 .await?;
         }
+    }
+
+    if !txt_record_found {
+        cloudflare_client.create_txt_record(&hostname, txt).await?;
     }
 
     Ok(())
