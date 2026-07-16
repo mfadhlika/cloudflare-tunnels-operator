@@ -2,8 +2,8 @@ name: Create and publish a Docker image
 
 on:
   push:
-    branches: ["main"]
-    tags: ["v*.*.*"]
+    branches: ['main']
+    tags: ['v*.*.*']
     paths:
       - src/**
       - Cargo.toml
@@ -30,6 +30,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Cargo test
+        run: cargo test
 
       - name: Prepare
         run: |

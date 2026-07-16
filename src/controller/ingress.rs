@@ -51,7 +51,7 @@ async fn patch_deployment(deploy_api: &Api<Deployment>, hash: String) -> Result<
 async fn upsert_dns_record(
     rule: &IngressRule,
     cloudflare_client: &CloudflareClient,
-    config: &TunnelConfig,
+    cname: &str,
     txt: &str,
 ) -> Result<(), Error> {
     let hostname = match &rule.host {
@@ -59,19 +59,22 @@ async fn upsert_dns_record(
         None => "@".to_string(),
     };
 
-    let cname_record_content = format!("{}.cfargotunnel.com", config.tunnel);
-
     // list all dns record with the hostname
     let dns_records = cloudflare_client.find_dns_record(&hostname).await?;
 
     // find cname and all txt records
     let mut cname_record = None;
     let mut txt_record_found = false;
+    let mut other_txt_record_found = false;
     for record in dns_records {
         match record.content {
             DnsContent::CNAME { .. } => cname_record = Some(record),
-            DnsContent::TXT { content } if content == txt => {
-                txt_record_found = true;
+            DnsContent::TXT { content } => {
+                if content == txt {
+                    txt_record_found = true;
+                } else {
+                    other_txt_record_found = true;
+                }
             }
             _ => {}
         }
@@ -80,19 +83,34 @@ async fn upsert_dns_record(
     if !txt_record_found {
         cloudflare_client.create_txt_record(&hostname, &txt).await?;
     }
-
     match cname_record {
         Some(record) => match record.content {
-            DnsContent::CNAME { content } if content != cname_record_content => {
-                cloudflare_client
-                    .update_cname_record(&record.id, &hostname, &cname_record_content)
-                    .await?;
+            DnsContent::CNAME { content } => {
+                if content != cname {
+                    if !other_txt_record_found {
+                        if !txt_record_found {
+                            cloudflare_client.create_txt_record(&hostname, &txt).await?;
+                        }
+
+                        cloudflare_client
+                            .update_cname_record(&record.id, &hostname, cname)
+                            .await?;
+                    } else {
+                        return Err(Error::Other(anyhow!(
+                            "CNAME record set to another tunnel, maybe set by another tunnel. If you think that's not the case, manually delete the record from Cloudflare dashboard"
+                        )));
+                    }
+                }
             }
             _ => {}
         },
         None => {
+            if !txt_record_found {
+                cloudflare_client.create_txt_record(&hostname, &txt).await?;
+            }
+
             cloudflare_client
-                .create_cname_record(&hostname, &cname_record_content)
+                .create_cname_record(&hostname, cname)
                 .await?;
         }
     }
@@ -205,6 +223,7 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
         obj.metadata.namespace.as_ref().unwrap(),
         obj.metadata.name.as_ref().unwrap()
     );
+    let cname_record_content = format!("{}.cfargotunnel.com", config.tunnel);
 
     finalizer(&ing_api, INGRESS_FINALIZER, obj, |event| async {
         match event {
@@ -294,7 +313,7 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                         if let Err(err) = upsert_dns_record(
                             rule,
                             &cloudflare_client,
-                            &config,
+                            &cname_record_content,
                             &txt_record_content,
                         )
                         .await
@@ -441,4 +460,574 @@ pub async fn run(ctx: Arc<Context>) -> anyhow::Result<()> {
         .await;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use k8s_openapi::api::networking::v1::{
+        HTTPIngressPath, HTTPIngressRuleValue, IngressBackend, IngressServiceBackend,
+        ServiceBackendPort,
+    };
+    use mockito::{Matcher, Mock, ServerGuard};
+    use serde_json::json;
+
+    use super::*;
+
+    async fn setup_create_dns_mock(
+        server: &mut ServerGuard,
+        record_type: &str,
+        content: &str,
+    ) -> Mock {
+        return server
+            .mock("POST", "/zones/test-zone/dns_records")
+            .match_body(Matcher::Json(json!({
+                "proxied": true,
+                "name": "test.example.com",
+                "type": record_type,
+                "content": content
+            })))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "errors": [],
+                    "messages": [],
+                    "success": true,
+                    "result": {
+                        "name": "test.example.com",
+                        "ttl": 3600,
+                        "type": record_type,
+                        "comment": "Domain verification record",
+                        "content": content,
+                        "private_routing": true,
+                        "proxied": true,
+                        "settings": {
+                          "ipv4_only": true,
+                          "ipv6_only": true
+                        },
+                        "tags": [
+                          "owner:dns-team"
+                        ],
+                        "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                        "created_on": "2014-01-01T05:20:00.12345Z",
+                        "meta": {
+                          "dead_glue": true,
+                          "is_glue": true,
+                          "shadowed_by": [
+                            "372e67954025e0ba6aaa6d586b9e0b59"
+                          ],
+                          "shadowed_records_count": 42
+                        },
+                        "modified_on": "2014-01-01T05:20:00.12345Z",
+                        "proxiable": true,
+                        "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                        "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                    }
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+    }
+
+    #[tokio::test]
+    async fn test_upsert_dns_record_on_empty_record() {
+        let cname = "test-cname";
+        let txt = "test-txt";
+
+        let mut server = mockito::Server::new_async().await;
+
+        // Use one of these addresses to configure your client
+        let url = server.url();
+
+        // Create a mock
+        let _ = server
+            .mock("GET", "/zones/test-zone/dns_records?name=test.example.com")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "errors": [],
+                    "messages": [],
+                    "success": true,
+                    "result": []
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let _ = setup_create_dns_mock(&mut server, "TXT", txt).await;
+
+        let _ = setup_create_dns_mock(&mut server, "CNAME", cname).await;
+
+        let cloudflare_client = crate::cloudflare::Client::new(
+            "test-account".to_string(),
+            "test-zone".to_string(),
+            crate::cloudflare::Credentials::UserAuthToken {
+                token: "token".to_string(),
+            },
+            crate::cloudflare::Environment::Custom(url),
+        )
+        .unwrap();
+
+        let rule = IngressRule {
+            host: Some("test.example.com".to_string()),
+            http: Some(HTTPIngressRuleValue {
+                paths: vec![HTTPIngressPath {
+                    backend: IngressBackend {
+                        service: Some(IngressServiceBackend {
+                            name: "test".to_string(),
+                            port: Some(ServiceBackendPort {
+                                name: Some("http".to_string()),
+                                ..Default::default()
+                            }),
+                        }),
+                        ..Default::default()
+                    },
+                    path: Some("/".to_string()),
+                    path_type: "Prefix".to_string(),
+                }],
+            }),
+        };
+
+        if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
+            assert!(false, "failed to upsert dns record: {err:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_upsert_dns_record_on_missing_txt_record() {
+        let cname = "test-cname";
+        let txt = "test-txt";
+
+        let mut server = mockito::Server::new_async().await;
+
+        // Use one of these addresses to configure your client
+        let url = server.url();
+
+        // Create a mock
+        let _ = server
+            .mock("GET", "/zones/test-zone/dns_records?name=test.example.com")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "errors": [],
+                    "messages": [],
+                    "success": true,
+                    "result": [
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "CNAME",
+                          "comment": "Domain verification record",
+                          "content": cname,
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        }
+                    ]
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let _ = setup_create_dns_mock(&mut server, "TXT", txt).await;
+
+        let cloudflare_client = crate::cloudflare::Client::new(
+            "test-account".to_string(),
+            "test-zone".to_string(),
+            crate::cloudflare::Credentials::UserAuthToken {
+                token: "token".to_string(),
+            },
+            crate::cloudflare::Environment::Custom(url),
+        )
+        .unwrap();
+
+        let rule = IngressRule {
+            host: Some("test.example.com".to_string()),
+            http: Some(HTTPIngressRuleValue {
+                paths: vec![HTTPIngressPath {
+                    backend: IngressBackend {
+                        service: Some(IngressServiceBackend {
+                            name: "test".to_string(),
+                            port: Some(ServiceBackendPort {
+                                name: Some("http".to_string()),
+                                ..Default::default()
+                            }),
+                        }),
+                        ..Default::default()
+                    },
+                    path: Some("/".to_string()),
+                    path_type: "Prefix".to_string(),
+                }],
+            }),
+        };
+
+        if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
+            assert!(false, "failed to upsert dns record: {err:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_upsert_dns_record_on_missing_cname_record() {
+        let cname = "test-cname";
+        let txt = "test-txt";
+
+        let mut server = mockito::Server::new_async().await;
+
+        // Use one of these addresses to configure your client
+        let url = server.url();
+
+        // Create a mock
+        let _ = server
+            .mock("GET", "/zones/test-zone/dns_records?name=test.example.com")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "errors": [],
+                    "messages": [],
+                    "success": true,
+                    "result": [
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "TXT",
+                          "comment": "Domain verification record",
+                          "content": txt,
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        }
+                    ]
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let _ = setup_create_dns_mock(&mut server, "CNAME", cname).await;
+
+        let cloudflare_client = crate::cloudflare::Client::new(
+            "test-account".to_string(),
+            "test-zone".to_string(),
+            crate::cloudflare::Credentials::UserAuthToken {
+                token: "token".to_string(),
+            },
+            crate::cloudflare::Environment::Custom(url),
+        )
+        .unwrap();
+
+        let rule = IngressRule {
+            host: Some("test.example.com".to_string()),
+            http: Some(HTTPIngressRuleValue {
+                paths: vec![HTTPIngressPath {
+                    backend: IngressBackend {
+                        service: Some(IngressServiceBackend {
+                            name: "test".to_string(),
+                            port: Some(ServiceBackendPort {
+                                name: Some("http".to_string()),
+                                ..Default::default()
+                            }),
+                        }),
+                        ..Default::default()
+                    },
+                    path: Some("/".to_string()),
+                    path_type: "Prefix".to_string(),
+                }],
+            }),
+        };
+
+        if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
+            assert!(false, "failed to upsert dns record: {err:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_upsert_dns_record_on_existing_records() {
+        let cname = "test-cname";
+        let txt = "test-txt";
+
+        let mut server = mockito::Server::new_async().await;
+
+        // Use one of these addresses to configure your client
+        let url = server.url();
+
+        // Create a mock
+        let _ = server
+            .mock("GET", "/zones/test-zone/dns_records?name=test.example.com")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "errors": [],
+                    "messages": [],
+                    "success": true,
+                    "result": [
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "CNAME",
+                          "comment": "Domain verification record",
+                          "content": cname,
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        },
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "TXT",
+                          "comment": "Domain verification record",
+                          "content": txt,
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        }
+                    ]
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let cloudflare_client = crate::cloudflare::Client::new(
+            "test-account".to_string(),
+            "test-zone".to_string(),
+            crate::cloudflare::Credentials::UserAuthToken {
+                token: "token".to_string(),
+            },
+            crate::cloudflare::Environment::Custom(url),
+        )
+        .unwrap();
+
+        let rule = IngressRule {
+            host: Some("test.example.com".to_string()),
+            http: Some(HTTPIngressRuleValue {
+                paths: vec![HTTPIngressPath {
+                    backend: IngressBackend {
+                        service: Some(IngressServiceBackend {
+                            name: "test".to_string(),
+                            port: Some(ServiceBackendPort {
+                                name: Some("http".to_string()),
+                                ..Default::default()
+                            }),
+                        }),
+                        ..Default::default()
+                    },
+                    path: Some("/".to_string()),
+                    path_type: "Prefix".to_string(),
+                }],
+            }),
+        };
+
+        if let Err(err) = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await {
+            assert!(false, "failed to upsert dns record: {err:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_upsert_dns_record_on_another_tunnel() {
+        let cname = "test-cname";
+        let txt = "test-txt";
+
+        let mut server = mockito::Server::new_async().await;
+
+        // Use one of these addresses to configure your client
+        let url = server.url();
+
+        // Create a mock
+        let _ = server
+            .mock("GET", "/zones/test-zone/dns_records?name=test.example.com")
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(
+                json!({
+                    "errors": [],
+                    "messages": [],
+                    "success": true,
+                    "result": [
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "CNAME",
+                          "comment": "Domain verification record",
+                          "content": "different-cname",
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        },
+                        {
+                          "name": "text.example.com",
+                          "ttl": 3600,
+                          "type": "TXT",
+                          "comment": "Domain verification record",
+                          "content": "different-txt",
+                          "private_routing": true,
+                          "proxied": true,
+                          "settings": {
+                            "ipv4_only": true,
+                            "ipv6_only": true
+                          },
+                          "tags": [
+                            "owner:dns-team"
+                          ],
+                          "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                          "created_on": "2014-01-01T05:20:00.12345Z",
+                          "meta": {
+                            "dead_glue": true,
+                            "is_glue": true,
+                            "shadowed_by": [
+                              "372e67954025e0ba6aaa6d586b9e0b59"
+                            ],
+                            "shadowed_records_count": 42
+                          },
+                          "modified_on": "2014-01-01T05:20:00.12345Z",
+                          "proxiable": true,
+                          "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                          "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                        }
+                    ]
+                })
+                .to_string(),
+            )
+            .create_async()
+            .await;
+
+        let cloudflare_client = crate::cloudflare::Client::new(
+            "test-account".to_string(),
+            "test-zone".to_string(),
+            crate::cloudflare::Credentials::UserAuthToken {
+                token: "token".to_string(),
+            },
+            crate::cloudflare::Environment::Custom(url),
+        )
+        .unwrap();
+
+        let rule = IngressRule {
+            host: Some("test.example.com".to_string()),
+            http: Some(HTTPIngressRuleValue {
+                paths: vec![HTTPIngressPath {
+                    backend: IngressBackend {
+                        service: Some(IngressServiceBackend {
+                            name: "test".to_string(),
+                            port: Some(ServiceBackendPort {
+                                name: Some("http".to_string()),
+                                ..Default::default()
+                            }),
+                        }),
+                        ..Default::default()
+                    },
+                    path: Some("/".to_string()),
+                    path_type: "Prefix".to_string(),
+                }],
+            }),
+        };
+
+        let res = upsert_dns_record(&rule, &cloudflare_client, cname, txt).await;
+        assert!(res.is_err());
+    }
 }

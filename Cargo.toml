@@ -31,3 +31,6 @@ base64 = "0.22"
 regex = "1.10"
 actix-web = "4"
 json-patch = "4.1.0"
+
+[dev-dependencies]
+mockito   = "1.7.2"
