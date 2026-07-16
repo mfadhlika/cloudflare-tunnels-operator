@@ -4,6 +4,7 @@ use cloudflare::endpoints::dns::dns::DnsRecord;
 use rand::prelude::*;
 
 use super::TunnelCredentials;
+pub use cloudflare::framework::Environment;
 pub use cloudflare::framework::auth::Credentials;
 
 pub struct Client {
@@ -17,11 +18,12 @@ impl Client {
         account_id: String,
         zone_id: String,
         credentials: Credentials,
+        env: Environment,
     ) -> Result<Self, Error> {
         let client = cloudflare::framework::client::async_api::Client::new(
             credentials,
             cloudflare::framework::client::ClientConfig::default(),
-            cloudflare::framework::Environment::Production,
+            env,
         )?;
 
         Ok(Self {

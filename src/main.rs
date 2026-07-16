@@ -57,6 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
         args.cloudflare_account_id.clone(),
         args.cloudflare_zone_id.clone(),
         cloudflare_credentials,
+        cloudflare::Environment::Production,
     )?;
 
     let ctx = Arc::new(Context {
