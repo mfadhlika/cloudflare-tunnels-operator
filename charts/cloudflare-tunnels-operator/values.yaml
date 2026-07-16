@@ -19,7 +19,7 @@ logLevel: error
 ingressClass:
   enabled: true
   isDefaultClass: false
-  name: cloudflare-tunnels
+#  name: cloudflare-tunnels
 
 owner:
   name: default

@@ -2,4 +2,13 @@ apiVersion: cloudflare-tunnels-operator.io/v1alpha1
 kind: ClusterTunnel
 metadata:
   name: devtunnel
-spec: {}
+spec:
+  tunnelSecretRef:
+    name: cloudflared-example-credentials
+    key: credentials.json
+  originCertSecretRef:
+    name: cloudflared-example-origin-cert
+    key: cert.pem
+  cloudflared:
+    protocol: http2
+    edgeIpVersion: '6'
