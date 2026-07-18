@@ -26,6 +26,12 @@ use crate::{
 
 use super::{OPERATOR_MANAGER, error_policy};
 
+#[cfg(not(test))]
+const REQUEUE_DURATION_SECONDS: u64 = 3600;
+
+#[cfg(test)]
+const REQUEUE_DURATION_SECONDS: u64 = 5;
+
 const INGRESS_FINALIZER: &str = "ingress.cloudflare-tunnels-operator.io/finalizer";
 
 async fn patch_deployment(deploy_api: &Api<Deployment>, hash: String) -> Result<(), Error> {
@@ -220,7 +226,9 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
         match event {
             finalizer::Event::Apply(obj) => {
                 let Some(spec) = obj.spec.as_ref() else {
-                    return Ok(Action::requeue(Duration::from_secs(3600)));
+                    return Ok(Action::requeue(Duration::from_secs(
+                        REQUEUE_DURATION_SECONDS,
+                    )));
                 };
 
                 for rule in spec.rules.iter().flatten() {
@@ -366,11 +374,15 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
                     )
                     .await?;
 
-                Ok(Action::requeue(Duration::from_secs(3600)))
+                Ok(Action::requeue(Duration::from_secs(
+                    REQUEUE_DURATION_SECONDS,
+                )))
             }
             finalizer::Event::Cleanup(obj) => {
                 let Some(spec) = obj.spec.as_ref() else {
-                    return Ok(Action::requeue(Duration::from_secs(3600)));
+                    return Ok(Action::requeue(Duration::from_secs(
+                        REQUEUE_DURATION_SECONDS,
+                    )));
                 };
 
                 for rule in spec.rules.iter().flatten() {
@@ -425,7 +437,9 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
 
                 patch_deployment(&deploy_api, config_hash).await?;
 
-                Ok(Action::requeue(Duration::from_secs(3600)))
+                Ok(Action::requeue(Duration::from_secs(
+                    REQUEUE_DURATION_SECONDS,
+                )))
             }
         }
     })

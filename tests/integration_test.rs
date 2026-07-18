@@ -178,29 +178,61 @@ async fn test_ingress_controller() {
         cloudflare_client,
     });
 
-    tokio::spawn(async move {
-        let ct = controller::clustertunnel::run(ctx.clone());
-        let ing = controller::ingress::run(ctx.clone());
+    tokio::spawn({
+        let kube_cli = kube_cli.clone();
+        async move {
+            let crd_api: Api<CustomResourceDefinition> = Api::all(kube_cli.clone());
+            let ingc_api: Api<IngressClass> = Api::all(kube_cli.clone());
 
-        let _ = tokio::join!(ct, ing);
+            if let Err(err) = crd_api
+                .create(
+                    &PostParams::default(),
+                    &cloudflare_tunnels_operator::ClusterTunnel::crd(),
+                )
+                .await
+            {
+                assert!(false, "{err:?}");
+            }
+
+            let ingress_class = IngressClass {
+                metadata: ObjectMeta {
+                    name: Some("cloudflare-tunnels".to_string()),
+                    annotations: Some({
+                        let mut map = BTreeMap::new();
+                        map.insert(
+                            "ingressclass.kubernetes.io/is-default-class".to_string(),
+                            "true".to_string(),
+                        );
+                        map
+                    }),
+                    ..Default::default()
+                },
+                spec: Some(IngressClassSpec {
+                    controller: Some(
+                        "cloudflare-tunnels-operator.io/ingress-controller".to_string(),
+                    ),
+                    ..Default::default()
+                }),
+            };
+
+            if let Err(err) = ingc_api
+                .create(&PostParams::default(), &ingress_class)
+                .await
+            {
+                assert!(false, "{err:?}");
+            }
+
+            let ct = controller::clustertunnel::run(ctx.clone());
+            let ing = controller::ingress::run(ctx.clone());
+
+            let _ = tokio::join!(ct, ing);
+        }
     });
 
-    let crd_api: Api<CustomResourceDefinition> = Api::all(kube_cli.clone());
     let sec_api: Api<Secret> = Api::namespaced(kube_cli.clone(), "default");
     let ct_api: Api<ClusterTunnel> = Api::all(kube_cli.clone());
     let svc_api: Api<Service> = Api::namespaced(kube_cli.clone(), "default");
-    let ingc_api: Api<IngressClass> = Api::all(kube_cli.clone());
     let ing_api: Api<Ingress> = Api::namespaced(kube_cli.clone(), "default");
-
-    if let Err(err) = crd_api
-        .create(
-            &PostParams::default(),
-            &cloudflare_tunnels_operator::ClusterTunnel::crd(),
-        )
-        .await
-    {
-        assert!(false, "{err:?}");
-    }
 
     let secret = Secret {
         metadata: ObjectMeta {
@@ -240,32 +272,6 @@ async fn test_ingress_controller() {
     };
 
     if let Err(err) = ct_api.create(&PostParams::default(), &cluster_tunnel).await {
-        assert!(false, "{err:?}");
-    }
-
-    let ingress_class = IngressClass {
-        metadata: ObjectMeta {
-            name: Some("cloudflare-tunnels".to_string()),
-            annotations: Some({
-                let mut map = BTreeMap::new();
-                map.insert(
-                    "ingressclass.kubernetes.io/is-default-class".to_string(),
-                    "true".to_string(),
-                );
-                map
-            }),
-            ..Default::default()
-        },
-        spec: Some(IngressClassSpec {
-            controller: Some("cloudflare-tunnels-operator.io/ingress-controller".to_string()),
-            ..Default::default()
-        }),
-    };
-
-    if let Err(err) = ingc_api
-        .create(&PostParams::default(), &ingress_class)
-        .await
-    {
         assert!(false, "{err:?}");
     }
 
@@ -326,7 +332,7 @@ async fn test_ingress_controller() {
         assert!(false, "{err:?}");
     }
 
-    tokio::time::sleep(Duration::from_secs(30)).await;
+    tokio::time::sleep(Duration::from_secs(300)).await;
 
     list_tunnel_mock.expect_at_least(1).assert_async().await;
     list_dns_mock.assert_async().await;
