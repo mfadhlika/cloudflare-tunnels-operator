@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use cloudflare::framework::Environment;
 use cloudflare_tunnels_operator::{Context, controller};
@@ -16,6 +16,61 @@ use kube::{
     Api,
     api::{ObjectMeta, PostParams},
 };
+use mockito::{Matcher, Mock, ServerGuard};
+use serde_json::json;
+
+async fn setup_create_dns_mock(server: &mut ServerGuard, record_type: &str, content: &str) -> Mock {
+    return server
+        .mock("POST", "/zones/e2e-test-zone/dns_records")
+        .match_body(Matcher::Json(json!({
+            "proxied": true,
+            "name": "test.example.com",
+            "type": record_type,
+            "content": content
+        })))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "errors": [],
+                "messages": [],
+                "success": true,
+                "result": {
+                    "name": "whoami.example.com",
+                    "ttl": 3600,
+                    "type": record_type,
+                    "comment": "Domain verification record",
+                    "content": content,
+                    "private_routing": true,
+                    "proxied": true,
+                    "settings": {
+                      "ipv4_only": true,
+                      "ipv6_only": true
+                    },
+                    "tags": [
+                      "owner:dns-team"
+                    ],
+                    "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                    "created_on": "2014-01-01T05:20:00.12345Z",
+                    "meta": {
+                      "dead_glue": true,
+                      "is_glue": true,
+                      "shadowed_by": [
+                        "372e67954025e0ba6aaa6d586b9e0b59"
+                      ],
+                      "shadowed_records_count": 42
+                    },
+                    "modified_on": "2014-01-01T05:20:00.12345Z",
+                    "proxiable": true,
+                    "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                    "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+}
 
 #[tokio::test]
 async fn test_ingress_controller() {
@@ -25,21 +80,42 @@ async fn test_ingress_controller() {
     let url = server.url();
 
     // Create a mock
-    let _ = server
-        .mock("GET", "/zones/{zone_id}/dns_records")
-        .with_status(201)
-        .with_header("content-type", "text/plain")
-        .with_header("x-api-key", "1234")
-        .with_body("world")
-        .create();
+    let list_dns_mock = server
+        .mock(
+            "GET",
+            "/zones/e2e-test-zone/dns_records?name=test.example.com",
+        )
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "errors": [],
+                "messages": [],
+                "success": true,
+                "result": []
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let create_txt_mock = setup_create_dns_mock(
+        &mut server,
+        "TXT",
+        "heritage=cloudflare-tunnels-operator,cloudflare-tunnels-operator/owner=default,cloudflare-tunnels-operator/resource=ingress/default/whomai",
+    )
+    .await;
+
+    let create_cname_mock =
+        setup_create_dns_mock(&mut server, "CNAME", "1234.cfargotunnel.com").await;
 
     let kube_cli = kube::Client::try_default().await.unwrap();
 
     let cloudflare_client = cloudflare_tunnels_operator::cloudflare::Client::new(
-        "test".to_string(),
-        "test".to_string(),
+        "e2e-test-account".to_string(),
+        "e2e-test-zone".to_string(),
         cloudflare_tunnels_operator::cloudflare::Credentials::UserAuthToken {
-            token: "token".to_string(),
+            token: "e2e-test-token".to_string(),
         },
         Environment::Custom(url),
     )
@@ -115,4 +191,10 @@ async fn test_ingress_controller() {
     if let Err(err) = ing_api.create(&PostParams::default(), &ingress).await {
         assert!(false, "{err:?}");
     }
+
+    tokio::time::sleep(Duration::from_secs(30)).await;
+
+    list_dns_mock.assert_async().await;
+    create_cname_mock.assert_async().await;
+    create_txt_mock.assert_async().await;
 }
