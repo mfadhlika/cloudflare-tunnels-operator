@@ -84,6 +84,50 @@ async fn test_ingress_controller() {
     let mut server = mockito::Server::new_async().await;
 
     // Create a mock
+    let list_tunnel_mock = server
+        .mock(
+            "GET",
+            "/accounts/e2e-test-account/cfd_tunnel?name=e2e-test&is_deleted=false",
+        )
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "errors": [],
+                "messages": [],
+                "success": true,
+                "result": [{
+                    "id": "f70ff985-a4ef-4643-bbbc-4a0ed4fc8415",
+                    "account_tag": "699d98642c564d2e855e9661899b7252",
+                    "config_src": "local",
+                    "connections": [
+                      {
+                        "id": "1bedc50d-42b3-473c-b108-ff3d10c0d925",
+                        "client_id": "1bedc50d-42b3-473c-b108-ff3d10c0d925",
+                        "client_version": "2022.7.1",
+                        "colo_name": "DFW",
+                        "is_pending_reconnect": false,
+                        "opened_at": "2021-01-25T18:22:34.317854Z",
+                        "origin_ip": "10.1.0.137",
+                        "uuid": "1bedc50d-42b3-473c-b108-ff3d10c0d925"
+                      }
+                    ],
+                    "conns_active_at": "2009-11-10T23:00:00Z",
+                    "conns_inactive_at": "2009-11-10T23:00:00Z",
+                    "created_at": "2021-01-25T18:22:34.317854Z",
+                    "deleted_at": "2009-11-10T23:00:00.000000Z",
+                    "metadata": {},
+                    "name": "e2e-test",
+                    "remote_config": false,
+                    "status": "healthy",
+                    "tun_type": "cfd_tunnel"
+                }],
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
     let list_dns_mock = server
         .mock(
             "GET",
@@ -178,7 +222,7 @@ async fn test_ingress_controller() {
 
     let cluster_tunnel = ClusterTunnel {
         metadata: ObjectMeta {
-            name: Some("cloudflared-secret".to_string()),
+            name: Some("e2e-test".to_string()),
             ..Default::default()
         },
         spec: ClusterTunnelSpec {
@@ -284,6 +328,7 @@ async fn test_ingress_controller() {
 
     tokio::time::sleep(Duration::from_secs(30)).await;
 
+    list_tunnel_mock.assert_async().await;
     list_dns_mock.assert_async().await;
     create_cname_mock.assert_async().await;
     create_txt_mock.assert_async().await;
