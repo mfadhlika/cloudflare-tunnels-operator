@@ -1,19 +1,26 @@
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use cloudflare::framework::Environment;
-use cloudflare_tunnels_operator::{Context, controller};
+use cloudflare_tunnels_operator::{
+    ClusterTunnel, Context,
+    controller::{
+        self,
+        clustertunnel::{ClusterTunnelSpec, SecretRef},
+    },
+};
 use k8s_openapi::{
     api::{
-        core::v1::{Service, ServicePort, ServiceSpec},
+        core::v1::{Secret, Service, ServicePort, ServiceSpec},
         networking::v1::{
             HTTPIngressPath, HTTPIngressRuleValue, Ingress, IngressBackend, IngressRule,
             IngressServiceBackend, IngressSpec, ServiceBackendPort,
         },
     },
+    apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
     apimachinery::pkg::util::intstr::IntOrString,
 };
 use kube::{
-    Api,
+    Api, CustomResourceExt,
     api::{ObjectMeta, PostParams},
 };
 use mockito::{Matcher, Mock, ServerGuard};
@@ -130,8 +137,62 @@ async fn test_ingress_controller() {
     let _ = controller::clustertunnel::run(ctx.clone());
     let _ = controller::ingress::run(ctx.clone());
 
+    let crd_api: Api<CustomResourceDefinition> = Api::all(kube_cli.clone());
+    let sec_api: Api<Secret> = Api::namespaced(kube_cli.clone(), "default");
+    let ct_api: Api<ClusterTunnel> = Api::all(kube_cli.clone());
     let svc_api: Api<Service> = Api::namespaced(kube_cli.clone(), "default");
     let ing_api: Api<Ingress> = Api::namespaced(kube_cli.clone(), "default");
+
+    if let Err(err) = crd_api
+        .create(
+            &PostParams::default(),
+            &cloudflare_tunnels_operator::ClusterTunnel::crd(),
+        )
+        .await
+    {
+        assert!(false, "{err:?}");
+    }
+
+    let secret = Secret {
+        metadata: ObjectMeta {
+            name: Some("cloudflared-secret".to_string()),
+            ..Default::default()
+        },
+        string_data: Some({
+            let mut map = BTreeMap::new();
+            map.insert("credentials.json".to_string(), "".to_string());
+            map.insert("cert.pem".to_string(), "".to_string());
+            map
+        }),
+        ..Default::default()
+    };
+
+    if let Err(err) = sec_api.create(&PostParams::default(), &secret).await {
+        assert!(false, "{err:?}");
+    }
+
+    let cluster_tunnel = ClusterTunnel {
+        metadata: ObjectMeta {
+            name: Some("cloudflared-secret".to_string()),
+            ..Default::default()
+        },
+        spec: ClusterTunnelSpec {
+            name: Some("e2e-test".to_string()),
+            tunnel_secret_ref: Some(SecretRef {
+                name: "cloudflared-secret".to_string(),
+                key: "credentials.json".to_string(),
+            }),
+            origin_cert_secret_ref: Some(SecretRef {
+                name: "cloudflared-secret".to_string(),
+                key: "cert.pem".to_string(),
+            }),
+            cloudflared: None,
+        },
+    };
+
+    if let Err(err) = ct_api.create(&PostParams::default(), &cluster_tunnel).await {
+        assert!(false, "{err:?}");
+    }
 
     let service = Service {
         metadata: ObjectMeta {
