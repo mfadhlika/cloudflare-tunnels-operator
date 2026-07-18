@@ -198,6 +198,14 @@ async fn test_ingress_controller() {
     let ingress_class = IngressClass {
         metadata: ObjectMeta {
             name: Some("cloudflare-tunnels".to_string()),
+            annotations: Some({
+                let mut map = BTreeMap::new();
+                map.insert(
+                    "ingressclass.kubernetes.io/is-default-class".to_string(),
+                    "true".to_string(),
+                );
+                map
+            }),
             ..Default::default()
         },
         spec: Some(IngressClassSpec {
