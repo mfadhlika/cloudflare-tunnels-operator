@@ -12,8 +12,8 @@ use k8s_openapi::{
     api::{
         core::v1::{Secret, Service, ServicePort, ServiceSpec},
         networking::v1::{
-            HTTPIngressPath, HTTPIngressRuleValue, Ingress, IngressBackend, IngressRule,
-            IngressServiceBackend, IngressSpec, ServiceBackendPort,
+            HTTPIngressPath, HTTPIngressRuleValue, Ingress, IngressBackend, IngressClass,
+            IngressClassSpec, IngressRule, IngressServiceBackend, IngressSpec, ServiceBackendPort,
         },
     },
     apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
@@ -141,6 +141,7 @@ async fn test_ingress_controller() {
     let sec_api: Api<Secret> = Api::namespaced(kube_cli.clone(), "default");
     let ct_api: Api<ClusterTunnel> = Api::all(kube_cli.clone());
     let svc_api: Api<Service> = Api::namespaced(kube_cli.clone(), "default");
+    let ingc_api: Api<IngressClass> = Api::all(kube_cli.clone());
     let ing_api: Api<Ingress> = Api::namespaced(kube_cli.clone(), "default");
 
     if let Err(err) = crd_api
@@ -191,6 +192,24 @@ async fn test_ingress_controller() {
     };
 
     if let Err(err) = ct_api.create(&PostParams::default(), &cluster_tunnel).await {
+        assert!(false, "{err:?}");
+    }
+
+    let ingress_class = IngressClass {
+        metadata: ObjectMeta {
+            name: Some("cloudflare-tunnels".to_string()),
+            ..Default::default()
+        },
+        spec: Some(IngressClassSpec {
+            controller: Some("cloudflare-tunnels-operator.io/ingress-controller".to_string()),
+            ..Default::default()
+        }),
+    };
+
+    if let Err(err) = ingc_api
+        .create(&PostParams::default(), &ingress_class)
+        .await
+    {
         assert!(false, "{err:?}");
     }
 
