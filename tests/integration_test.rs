@@ -76,14 +76,11 @@ async fn setup_create_dns_mock(server: &mut ServerGuard, record_type: &str, cont
 async fn test_ingress_controller() {
     let mut server = mockito::Server::new_async().await;
 
-    // Use one of these addresses to configure your client
-    let url = server.url();
-
     // Create a mock
     let list_dns_mock = server
         .mock(
             "GET",
-            "/zones/e2e-test-zone/dns_records?name=test.example.com",
+            "/zones/e2e-test-zone/dns_records?name=whoami.example.com",
         )
         .with_status(200)
         .with_header("content-type", "application/json")
@@ -117,7 +114,7 @@ async fn test_ingress_controller() {
         cloudflare_tunnels_operator::cloudflare::Credentials::UserAuthToken {
             token: "e2e-test-token".to_string(),
         },
-        Environment::Custom(url),
+        Environment::Custom(server.url()),
     )
     .unwrap();
 
