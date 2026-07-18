@@ -178,6 +178,7 @@ async fn test_ingress_controller() {
         cloudflare_client,
     });
 
+    let (sender, receiver) = tokio::sync::oneshot::channel();
     tokio::spawn({
         let kube_cli = kube_cli.clone();
         async move {
@@ -225,6 +226,7 @@ async fn test_ingress_controller() {
             let ct = controller::clustertunnel::run(ctx.clone());
             let ing = controller::ingress::run(ctx.clone());
 
+            let _ = sender.send(());
             let _ = tokio::join!(ct, ing);
         }
     });
@@ -270,6 +272,8 @@ async fn test_ingress_controller() {
             cloudflared: None,
         },
     };
+
+    let _ = receiver.await;
 
     if let Err(err) = ct_api.create(&PostParams::default(), &cluster_tunnel).await {
         assert!(false, "{err:?}");
