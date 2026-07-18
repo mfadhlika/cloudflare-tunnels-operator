@@ -134,8 +134,12 @@ async fn test_ingress_controller() {
         cloudflare_client,
     });
 
-    let _ = controller::clustertunnel::run(ctx.clone());
-    let _ = controller::ingress::run(ctx.clone());
+    tokio::spawn(async move {
+        let ct = controller::clustertunnel::run(ctx.clone());
+        let ing = controller::ingress::run(ctx.clone());
+
+        let _ = tokio::join!(ct, ing);
+    });
 
     let crd_api: Api<CustomResourceDefinition> = Api::all(kube_cli.clone());
     let sec_api: Api<Secret> = Api::namespaced(kube_cli.clone(), "default");
