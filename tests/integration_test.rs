@@ -85,7 +85,7 @@ async fn test_ingress_controller() {
         },
         spec: Some(IngressSpec {
             rules: Some(vec![IngressRule {
-                host: Some("/".to_string()),
+                host: Some("whoami.example.com".to_string()),
                 http: Some(HTTPIngressRuleValue {
                     paths: vec![HTTPIngressPath {
                         path: Some("/".to_string()),

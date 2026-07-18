@@ -9,6 +9,7 @@ on:
       - src/**
       - Cargo.toml
       - Cargo.lock
+      - tests/**
 
 env:
   REGISTRY: ghcr.io
