@@ -328,11 +328,12 @@ impl ClusterTunnel {
         Ok(())
     }
 
-    pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action, Error> {
-        let cf_cli = &ctx.cloudflare_client;
-
-        let tunnel_name = self.spec.name.clone().unwrap_or_else(|| self.name_any());
-        let tunnel_credentials = if let Some(tunnel_id) = cf_cli.find_tunnel(&tunnel_name).await? {
+    async fn get_or_create_tunnel_credentials(
+        &self,
+        ctx: &Context,
+        tunnel_name: &str,
+    ) -> Result<TunnelCredentials, Error> {
+        if let Some(tunnel_id) = ctx.cloudflare_client.find_tunnel(tunnel_name).await? {
             info!("tunnel found: {tunnel_id}");
 
             let client = ctx.kube_cli.clone();
@@ -354,13 +355,20 @@ impl ClusterTunnel {
                 .get(&secret_ref.key)
                 .ok_or_else(|| anyhow!("no credentials"))?;
             serde_json::from_slice(&creds.0)
-                .map_err(|err| anyhow!("failed to deserialize credentials: {err:?}"))?
+                .map_err(|err| Error::Other(anyhow!("failed to deserialize credentials: {err:?}")))
         } else {
             info!("tunnel not found, creating...");
 
             let tunnel_name = self.spec.name.clone().unwrap_or_else(|| self.name_any());
-            cf_cli.create_tunnel(&tunnel_name).await?
-        };
+            ctx.cloudflare_client.create_tunnel(&tunnel_name).await
+        }
+    }
+
+    pub async fn reconcile(&self, ctx: Arc<Context>) -> Result<Action, Error> {
+        let tunnel_name = self.spec.name.clone().unwrap_or_else(|| self.name_any());
+        let tunnel_credentials = self
+            .get_or_create_tunnel_credentials(&ctx, &tunnel_name)
+            .await?;
 
         self.deploy_cloudflared(ctx.clone(), &tunnel_credentials)
             .await?;

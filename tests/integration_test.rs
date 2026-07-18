@@ -244,7 +244,7 @@ async fn test_ingress_controller() {
         },
         string_data: Some({
             let mut map = BTreeMap::new();
-            map.insert("credentials.json".to_string(), "{}".to_string());
+            map.insert("credentials.json".to_string(), r#"{{"AccountTag":"e2e-account-tag","TunnelSecret":"e2e-tunnel-secret","TunnelID":"e2e-test"}}"#.to_string());
             map.insert("cert.pem".to_string(), "cert pem".to_string());
             map
         }),
@@ -362,7 +362,7 @@ async fn test_ingress_controller() {
 
     tokio::time::sleep(Duration::from_secs(300)).await;
 
-    list_tunnel_mock.expect_at_least(1).assert_async().await;
+    list_tunnel_mock.assert_async().await;
     list_dns_mock.assert_async().await;
     create_cname_mock.assert_async().await;
     create_txt_mock.assert_async().await;
