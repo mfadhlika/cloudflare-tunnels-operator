@@ -328,7 +328,7 @@ async fn test_ingress_controller() {
 
     tokio::time::sleep(Duration::from_secs(30)).await;
 
-    list_tunnel_mock.assert_async().await;
+    list_tunnel_mock.expect_at_least(1).assert_async().await;
     list_dns_mock.assert_async().await;
     create_cname_mock.assert_async().await;
     create_txt_mock.assert_async().await;
