@@ -249,6 +249,7 @@ async fn test_ingress_controller() {
             ..Default::default()
         },
         spec: Some(IngressSpec {
+            ingress_class_name: Some("cloudflare-tunnels".to_string()),
             rules: Some(vec![IngressRule {
                 host: Some("whoami.example.com".to_string()),
                 http: Some(HTTPIngressRuleValue {
