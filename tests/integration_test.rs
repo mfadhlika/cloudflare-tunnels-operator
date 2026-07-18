@@ -360,7 +360,7 @@ async fn test_ingress_controller() {
         assert!(false, "{err:?}");
     }
 
-    tokio::time::sleep(Duration::from_secs(300)).await;
+    tokio::time::sleep(Duration::from_secs(30)).await;
 
     list_tunnel_mock.assert_async().await;
     list_dns_mock.assert_async().await;
