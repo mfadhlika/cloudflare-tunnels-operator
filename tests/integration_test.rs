@@ -244,7 +244,7 @@ async fn test_ingress_controller() {
         },
         string_data: Some({
             let mut map = BTreeMap::new();
-            map.insert("credentials.json".to_string(), r#"{{"AccountTag":"e2e-account-tag","TunnelSecret":"e2e-tunnel-secret","TunnelID":"e2e-test"}}"#.to_string());
+            map.insert("credentials.json".to_string(), r#"{"AccountTag":"e2e-account-tag","TunnelSecret":"e2e-tunnel-secret","TunnelID":"e2e-test"}"#.to_string());
             map.insert("cert.pem".to_string(), "cert pem".to_string());
             map
         }),
