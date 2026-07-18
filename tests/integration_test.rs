@@ -10,7 +10,7 @@ use cloudflare_tunnels_operator::{
 };
 use k8s_openapi::{
     api::{
-        core::v1::{Secret, Service, ServicePort, ServiceSpec},
+        core::v1::{ConfigMap, Secret, Service, ServicePort, ServiceSpec},
         networking::v1::{
             HTTPIngressPath, HTTPIngressRuleValue, Ingress, IngressBackend, IngressClass,
             IngressClassSpec, IngressRule, IngressServiceBackend, IngressSpec, ServiceBackendPort,
@@ -21,7 +21,7 @@ use k8s_openapi::{
 };
 use kube::{
     Api, CustomResourceExt,
-    api::{ObjectMeta, PostParams},
+    api::{ListParams, ObjectMeta, PostParams},
 };
 use mockito::{Matcher, Mock, ServerGuard};
 use serde_json::json;
@@ -235,6 +235,7 @@ async fn test_ingress_controller() {
     let ct_api: Api<ClusterTunnel> = Api::all(kube_cli.clone());
     let svc_api: Api<Service> = Api::namespaced(kube_cli.clone(), "default");
     let ing_api: Api<Ingress> = Api::namespaced(kube_cli.clone(), "default");
+    let cm_api: Api<ConfigMap> = Api::namespaced(kube_cli.clone(), "default");
 
     let secret = Secret {
         metadata: ObjectMeta {
@@ -243,8 +244,8 @@ async fn test_ingress_controller() {
         },
         string_data: Some({
             let mut map = BTreeMap::new();
-            map.insert("credentials.json".to_string(), "".to_string());
-            map.insert("cert.pem".to_string(), "".to_string());
+            map.insert("credentials.json".to_string(), "{}".to_string());
+            map.insert("cert.pem".to_string(), "cert pem".to_string());
             map
         }),
         ..Default::default()
@@ -279,6 +280,29 @@ async fn test_ingress_controller() {
         assert!(false, "{err:?}");
     }
 
+    let mut retry = 0;
+    loop {
+        retry += 1;
+
+        match cm_api
+            .list(&ListParams::default().fields("metadata.name=cloudflared-e2e-test-config"))
+            .await
+        {
+            Ok(cms) => {
+                if cms.iter().count() > 0 {
+                    break;
+                }
+            }
+            Err(_) => {}
+        }
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        if retry >= 5 {
+            assert!(false, "config not created");
+        }
+    }
+
     let service = Service {
         metadata: ObjectMeta {
             name: Some("whoami".to_string()),
@@ -286,7 +310,7 @@ async fn test_ingress_controller() {
         },
         spec: Some(ServiceSpec {
             ports: Some(vec![ServicePort {
-                port: 8080,
+                port: 80,
                 target_port: Some(IntOrString::Int(80)),
                 protocol: Some("TCP".to_string()),
                 name: Some("http".to_string()),
