@@ -161,7 +161,7 @@ async fn cleanup_dns_records(
     Ok(())
 }
 
-pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
+async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
     if obj
         .annotations()
         .get("kubernetes.io/ingress.class")
@@ -172,7 +172,9 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
         .cloned()
         != ctx.ingress_class
     {
-        return Ok(Action::await_change());
+        return Ok(Action::requeue(Duration::from_secs(
+            REQUEUE_DURATION_SECONDS,
+        )));
     }
 
     let ns = std::env::var("POD_NAMESPACE").unwrap_or_else(|_| "default".to_string());
@@ -222,225 +224,290 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
     );
     let cname_record_content = format!("{}.cfargotunnel.com", config.tunnel);
 
+    let Some(spec) = obj.spec.as_ref() else {
+        return Ok(Action::requeue(Duration::from_secs(
+            REQUEUE_DURATION_SECONDS,
+        )));
+    };
+
+    for rule in spec.rules.iter().flatten() {
+        for ingress_path in rule
+            .http
+            .as_ref()
+            .map(|http| http.paths.clone())
+            .iter()
+            .flatten()
+        {
+            let path = if let Some(mut path) = ingress_path
+                .path
+                .as_ref()
+                .map(|p| format!("^{}", regex::escape(p)))
+            {
+                if ingress_path.path_type == "Exact" {
+                    path = format!("{path}\\/?$");
+                }
+
+                Some(path)
+            } else {
+                None
+            };
+
+            let Some(svc) = ingress_path.backend.service.as_ref() else {
+                continue;
+            };
+
+            let Some(svc_port) = svc.port.as_ref() else {
+                continue;
+            };
+
+            let port = if let Some(port) = svc_port.number {
+                port
+            } else if let Some(name) = svc_port.name.as_ref() {
+                let svc = svc_api.get(&svc.name).await?;
+                let Some(svc_spec) = svc.spec.as_ref() else {
+                    continue;
+                };
+                let Some(port) = svc_spec.ports.iter().flatten().find_map(|svc_port| {
+                    (svc_port.name == Some(name.to_string())).then_some(svc_port.port)
+                }) else {
+                    continue;
+                };
+
+                port
+            } else {
+                continue;
+            };
+
+            let service = format!(
+                "http://{}.{}.svc:{}",
+                svc.name,
+                obj.namespace().unwrap_or_else(|| "default".to_string()),
+                port
+            );
+
+            let ing = TunnelIngress {
+                hostname: rule.host.clone(),
+                path,
+                service: service.clone(),
+                origin_request: None,
+            };
+
+            if let Some(index) = config.ingress.iter().position(|ing| ing.service == service) {
+                config.ingress[index] = ing
+            } else if config.ingress.is_empty() {
+                config.ingress.push(ing);
+                config.ingress.push(TunnelIngress {
+                    service: "http_status:404".to_string(),
+                    ..TunnelIngress::default()
+                });
+            } else {
+                config.ingress.insert(config.ingress.len() - 1, ing);
+            }
+        }
+
+        if !ctx.disable_dns.unwrap_or_default() {
+            if let Err(err) = upsert_dns_record(
+                rule,
+                &cloudflare_client,
+                &cname_record_content,
+                &txt_record_content,
+            )
+            .await
+            {
+                error!("failed to create or update dns record: {err}");
+            }
+        }
+    }
+
+    let config_yaml = serde_yaml::to_string(&config).unwrap();
+    let config_hash = sha256::digest(&config_yaml);
+
+    /*
+    name: Some(config_name.to_string()),
+    namespace: Some(ns.to_owned()),
+    owner_references: Some(oref.to_vec()),
+     */
+    let config_map = ConfigMap {
+        metadata: ObjectMeta {
+            name: Some(config_map.name_any()),
+            namespace: config_map.namespace(),
+            owner_references: Some(config_map.owner_references().to_vec()),
+            ..ObjectMeta::default()
+        },
+        data: Some({
+            let mut map = BTreeMap::new();
+            map.insert("config.yaml".to_string(), config_yaml);
+            map
+        }),
+        ..config_map.clone()
+    };
+
+    cm_api
+        .patch(
+            &config_map.name_any(),
+            &PatchParams::apply(OPERATOR_MANAGER),
+            &Patch::Apply(&config_map),
+        )
+        .await?;
+
+    patch_deployment(&deploy_api, config_hash).await?;
+
+    let mut ing = ing_api.get_status(&obj.name_any()).await?;
+
+    ing.status = Some(IngressStatus {
+        load_balancer: Some(IngressLoadBalancerStatus {
+            ingress: Some(vec![IngressLoadBalancerIngress {
+                hostname: Some(format!("{}.cfargotunnel.com", config.tunnel)),
+                ..IngressLoadBalancerIngress::default()
+            }]),
+        }),
+    });
+
+    ing_api
+        .patch_status(
+            &ing.name_any(),
+            &PatchParams::apply(OPERATOR_MANAGER),
+            &Patch::Merge(ing),
+        )
+        .await?;
+
+    Ok(Action::requeue(Duration::from_secs(
+        REQUEUE_DURATION_SECONDS,
+    )))
+}
+
+async fn cleanup(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
+    if obj
+        .annotations()
+        .get("kubernetes.io/ingress.class")
+        .or(obj
+            .spec
+            .as_ref()
+            .and_then(|spec| spec.ingress_class_name.as_ref()))
+        .cloned()
+        != ctx.ingress_class
+    {
+        return Ok(Action::requeue(Duration::from_secs(
+            REQUEUE_DURATION_SECONDS,
+        )));
+    }
+
+    let ns = std::env::var("POD_NAMESPACE").unwrap_or_else(|_| "default".to_string());
+    let client = ctx.kube_cli.clone();
+
+    let cm_api: Api<ConfigMap> = Api::namespaced(client.clone(), &ns);
+    let deploy_api: Api<Deployment> = Api::namespaced(client.clone(), &ns);
+    let ct_api: Api<ClusterTunnel> = Api::all(client.clone());
+
+    let tunnel_name = if let Some(tunnel_name) = obj
+        .metadata
+        .annotations
+        .as_ref()
+        .and_then(|ann| ann.get(ANNOTATION_TUNNEL_NAME))
+    {
+        tunnel_name.to_owned()
+    } else if let Some(tunnel) = ct_api.list(&ListParams::default()).await?.items.first() {
+        tunnel
+            .spec
+            .name
+            .clone()
+            .unwrap_or_else(|| tunnel.name_any())
+    } else {
+        return Err(Error::Other(anyhow!("no clustertunnel found")));
+    };
+
+    let config_name = format!("cloudflared-{tunnel_name}-config");
+    let config_map = cm_api.get(&config_name).await?;
+    let mut config = config_map
+        .data
+        .as_ref()
+        .and_then(|data| data.get("config.yaml"))
+        .and_then(|cfg| serde_yaml::from_str::<TunnelConfig>(cfg).ok())
+        .ok_or_else(|| anyhow!("no data"))?;
+
+    let cloudflare_client = &ctx.cloudflare_client;
+
+    let name = "cloudflare-tunnels-operator".to_string();
+    let owner = ctx.owner.clone().unwrap_or("default".to_string());
+    let txt_record_content = format!(
+        "heritage={name},{name}/owner={owner},{name}/resource=ingress/{}/{}",
+        obj.namespace().unwrap_or("default".to_string()),
+        obj.name_any()
+    );
+
+    let Some(spec) = obj.spec.as_ref() else {
+        return Ok(Action::requeue(Duration::from_secs(
+            REQUEUE_DURATION_SECONDS,
+        )));
+    };
+
+    for rule in spec.rules.iter().flatten() {
+        for ingress_path in rule
+            .http
+            .as_ref()
+            .map(|http| http.paths.clone())
+            .iter()
+            .flatten()
+        {
+            let Some(svc) = ingress_path.backend.service.as_ref() else {
+                continue;
+            };
+
+            config
+                .ingress
+                .retain(|ing| !ing.service.contains(&svc.name));
+        }
+
+        if !ctx.disable_dns.unwrap_or_default() {
+            if let Err(err) =
+                cleanup_dns_records(rule, &cloudflare_client, &txt_record_content).await
+            {
+                error!("failed to clean up dns records: {err}");
+            }
+        }
+    }
+
+    let config_yaml = serde_yaml::to_string(&config).unwrap();
+    let config_hash = sha256::digest(&config_yaml);
+
+    let config_map = ConfigMap {
+        metadata: ObjectMeta {
+            managed_fields: None,
+            ..config_map.metadata.clone()
+        },
+        data: Some({
+            let mut map = BTreeMap::new();
+            map.insert("config.yaml".to_string(), config_yaml);
+            map
+        }),
+        ..config_map.clone()
+    };
+
+    cm_api
+        .patch(
+            &config_map.name_any(),
+            &PatchParams::apply(OPERATOR_MANAGER),
+            &Patch::Apply(&config_map),
+        )
+        .await?;
+
+    patch_deployment(&deploy_api, config_hash).await?;
+
+    Ok(Action::requeue(Duration::from_secs(
+        REQUEUE_DURATION_SECONDS,
+    )))
+}
+
+pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
+    let client = ctx.kube_cli.clone();
+
+    let ing_ns = obj.namespace().unwrap_or_else(|| "default".to_string());
+    let ing_api: Api<Ingress> = Api::namespaced(client.clone(), &ing_ns);
+
     finalizer(&ing_api, INGRESS_FINALIZER, obj, |event| async {
         match event {
-            finalizer::Event::Apply(obj) => {
-                let Some(spec) = obj.spec.as_ref() else {
-                    return Ok(Action::requeue(Duration::from_secs(
-                        REQUEUE_DURATION_SECONDS,
-                    )));
-                };
-
-                for rule in spec.rules.iter().flatten() {
-                    for ingress_path in rule
-                        .http
-                        .as_ref()
-                        .map(|http| http.paths.clone())
-                        .iter()
-                        .flatten()
-                    {
-                        let path = if let Some(mut path) = ingress_path
-                            .path
-                            .as_ref()
-                            .map(|p| format!("^{}", regex::escape(p)))
-                        {
-                            if ingress_path.path_type == "Exact" {
-                                path = format!("{path}\\/?$");
-                            }
-
-                            Some(path)
-                        } else {
-                            None
-                        };
-
-                        let Some(svc) = ingress_path.backend.service.as_ref() else {
-                            continue;
-                        };
-
-                        let Some(svc_port) = svc.port.as_ref() else {
-                            continue;
-                        };
-
-                        let port = if let Some(port) = svc_port.number {
-                            port
-                        } else if let Some(name) = svc_port.name.as_ref() {
-                            let svc = svc_api.get(&svc.name).await?;
-                            let Some(svc_spec) = svc.spec.as_ref() else {
-                                continue;
-                            };
-                            let Some(port) = svc_spec.ports.iter().flatten().find_map(|svc_port| {
-                                (svc_port.name == Some(name.to_string())).then_some(svc_port.port)
-                            }) else {
-                                continue;
-                            };
-
-                            port
-                        } else {
-                            continue;
-                        };
-
-                        let service = format!(
-                            "http://{}.{}.svc:{}",
-                            svc.name,
-                            obj.namespace().unwrap_or_else(|| "default".to_string()),
-                            port
-                        );
-
-                        let ing = TunnelIngress {
-                            hostname: rule.host.clone(),
-                            path,
-                            service: service.clone(),
-                            origin_request: None,
-                        };
-
-                        if let Some(index) =
-                            config.ingress.iter().position(|ing| ing.service == service)
-                        {
-                            config.ingress[index] = ing
-                        } else if config.ingress.is_empty() {
-                            config.ingress.push(ing);
-                            config.ingress.push(TunnelIngress {
-                                service: "http_status:404".to_string(),
-                                ..TunnelIngress::default()
-                            });
-                        } else {
-                            config.ingress.insert(config.ingress.len() - 1, ing);
-                        }
-                    }
-
-                    if !ctx.disable_dns.unwrap_or_default() {
-                        if let Err(err) = upsert_dns_record(
-                            rule,
-                            &cloudflare_client,
-                            &cname_record_content,
-                            &txt_record_content,
-                        )
-                        .await
-                        {
-                            error!("failed to create or update dns record: {err}");
-                        }
-                    }
-                }
-
-                let config_yaml = serde_yaml::to_string(&config).unwrap();
-                let config_hash = sha256::digest(&config_yaml);
-
-                /*
-                name: Some(config_name.to_string()),
-                namespace: Some(ns.to_owned()),
-                owner_references: Some(oref.to_vec()),
-                 */
-                let config_map = ConfigMap {
-                    metadata: ObjectMeta {
-                        name: Some(config_map.name_any()),
-                        namespace: config_map.namespace(),
-                        owner_references: Some(config_map.owner_references().to_vec()),
-                        ..ObjectMeta::default()
-                    },
-                    data: Some({
-                        let mut map = BTreeMap::new();
-                        map.insert("config.yaml".to_string(), config_yaml);
-                        map
-                    }),
-                    ..config_map.clone()
-                };
-
-                cm_api
-                    .patch(
-                        &config_map.name_any(),
-                        &PatchParams::apply(OPERATOR_MANAGER),
-                        &Patch::Apply(&config_map),
-                    )
-                    .await?;
-
-                patch_deployment(&deploy_api, config_hash).await?;
-
-                let mut ing = ing_api.get_status(&obj.name_any()).await?;
-
-                ing.status = Some(IngressStatus {
-                    load_balancer: Some(IngressLoadBalancerStatus {
-                        ingress: Some(vec![IngressLoadBalancerIngress {
-                            hostname: Some(format!("{}.cfargotunnel.com", config.tunnel)),
-                            ..IngressLoadBalancerIngress::default()
-                        }]),
-                    }),
-                });
-
-                ing_api
-                    .patch_status(
-                        &ing.name_any(),
-                        &PatchParams::apply(OPERATOR_MANAGER),
-                        &Patch::Merge(ing),
-                    )
-                    .await?;
-
-                Ok(Action::requeue(Duration::from_secs(
-                    REQUEUE_DURATION_SECONDS,
-                )))
-            }
-            finalizer::Event::Cleanup(obj) => {
-                let Some(spec) = obj.spec.as_ref() else {
-                    return Ok(Action::requeue(Duration::from_secs(
-                        REQUEUE_DURATION_SECONDS,
-                    )));
-                };
-
-                for rule in spec.rules.iter().flatten() {
-                    for ingress_path in rule
-                        .http
-                        .as_ref()
-                        .map(|http| http.paths.clone())
-                        .iter()
-                        .flatten()
-                    {
-                        let Some(svc) = ingress_path.backend.service.as_ref() else {
-                            continue;
-                        };
-
-                        config
-                            .ingress
-                            .retain(|ing| !ing.service.contains(&svc.name));
-                    }
-
-                    if !ctx.disable_dns.unwrap_or_default() {
-                        if let Err(err) =
-                            cleanup_dns_records(rule, &cloudflare_client, &txt_record_content).await
-                        {
-                            error!("failed to clean up dns records: {err}");
-                        }
-                    }
-                }
-
-                let config_yaml = serde_yaml::to_string(&config).unwrap();
-                let config_hash = sha256::digest(&config_yaml);
-
-                let config_map = ConfigMap {
-                    metadata: ObjectMeta {
-                        managed_fields: None,
-                        ..config_map.metadata.clone()
-                    },
-                    data: Some({
-                        let mut map = BTreeMap::new();
-                        map.insert("config.yaml".to_string(), config_yaml);
-                        map
-                    }),
-                    ..config_map.clone()
-                };
-
-                cm_api
-                    .patch(
-                        &config_map.name_any(),
-                        &PatchParams::apply(OPERATOR_MANAGER),
-                        &Patch::Apply(&config_map),
-                    )
-                    .await?;
-
-                patch_deployment(&deploy_api, config_hash).await?;
-
-                Ok(Action::requeue(Duration::from_secs(
-                    REQUEUE_DURATION_SECONDS,
-                )))
-            }
+            finalizer::Event::Apply(obj) => apply(obj, ctx).await,
+            finalizer::Event::Cleanup(obj) => cleanup(obj, ctx).await,
         }
     })
     .await

@@ -20,8 +20,9 @@ use k8s_openapi::{
     apimachinery::pkg::util::intstr::IntOrString,
 };
 use kube::{
-    Api, CustomResourceExt,
+    Api, CustomResourceExt, ResourceExt,
     api::{ListParams, ObjectMeta, PostParams},
+    runtime::reflector::Lookup,
 };
 use mockito::{Matcher, Mock, ServerGuard};
 use serde_json::json;
@@ -361,6 +362,30 @@ async fn test_ingress_controller() {
     }
 
     tokio::time::sleep(Duration::from_secs(30)).await;
+
+    match ing_api.get_status(&ingress.name_any()).await {
+        Ok(ing) => {
+            match ing
+                .status
+                .and_then(|status| status.load_balancer)
+                .and_then(|lb| lb.ingress)
+                .and_then(|ing| ing.first().cloned())
+                .and_then(|lb| lb.hostname)
+            {
+                Some(hostname) => {
+                    if hostname != "e2e-tunnel.cfargotunnel.com" {
+                        assert!(false, "expected e2e-tunnel.cfargotunnel.com got {hostname}");
+                    }
+                }
+                None => {
+                    assert!(false, "no ingress status");
+                }
+            };
+        }
+        Err(err) => {
+            assert!(false, "{err:?}");
+        }
+    }
 
     list_tunnel_mock.assert_async().await;
     list_dns_mock.assert_async().await;
