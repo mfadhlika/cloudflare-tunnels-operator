@@ -217,8 +217,8 @@ pub async fn reconcile(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, E
     let owner = ctx.owner.clone().unwrap_or("default".to_string());
     let txt_record_content = format!(
         "heritage={name},{name}/owner={owner},{name}/resource=ingress/{}/{}",
-        obj.metadata.namespace.as_ref().unwrap(),
-        obj.metadata.name.as_ref().unwrap()
+        obj.namespace().unwrap_or("default".to_string()),
+        obj.name_any()
     );
     let cname_record_content = format!("{}.cfargotunnel.com", config.tunnel);
 
