@@ -146,6 +146,76 @@ async fn test_ingress_controller() {
             })
             .to_string(),
         )
+        .with_body(
+            json!({
+                "errors": [],
+                "messages": [],
+                "success": true,
+                "result": [
+                    {
+                        "name": "whoami.example.com",
+                        "ttl": 3600,
+                        "type": "CNAME",
+                        "comment": "Domain verification record",
+                        "content": "e2e-test.cfargotunnel.com",
+                        "private_routing": true,
+                        "proxied": true,
+                        "settings": {
+                          "ipv4_only": true,
+                          "ipv6_only": true
+                        },
+                        "tags": [
+                          "owner:dns-team"
+                        ],
+                        "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                        "created_on": "2014-01-01T05:20:00.12345Z",
+                        "meta": {
+                          "dead_glue": true,
+                          "is_glue": true,
+                          "shadowed_by": [
+                            "372e67954025e0ba6aaa6d586b9e0b59"
+                          ],
+                          "shadowed_records_count": 42
+                        },
+                        "modified_on": "2014-01-01T05:20:00.12345Z",
+                        "proxiable": true,
+                        "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                        "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                    },
+                    {
+                        "name": "whoami.example.com",
+                        "ttl": 3600,
+                        "type": "TXT",
+                        "comment": "Domain verification record",
+                        "content": "heritage=cloudflare-tunnels-operator,cloudflare-tunnels-operator/owner=default,cloudflare-tunnels-operator/resource=ingress/default/whoami",
+                        "private_routing": true,
+                        "proxied": true,
+                        "settings": {
+                          "ipv4_only": true,
+                          "ipv6_only": true
+                        },
+                        "tags": [
+                          "owner:dns-team"
+                        ],
+                        "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                        "created_on": "2014-01-01T05:20:00.12345Z",
+                        "meta": {
+                          "dead_glue": true,
+                          "is_glue": true,
+                          "shadowed_by": [
+                            "372e67954025e0ba6aaa6d586b9e0b59"
+                          ],
+                          "shadowed_records_count": 42
+                        },
+                        "modified_on": "2014-01-01T05:20:00.12345Z",
+                        "proxiable": true,
+                        "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                        "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                    }
+                ]
+            })
+            .to_string(),
+        )
         .create_async()
         .await;
 
