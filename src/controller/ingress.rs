@@ -26,11 +26,7 @@ use crate::{
 
 use super::{OPERATOR_MANAGER, error_policy};
 
-#[cfg(not(test))]
 const REQUEUE_DURATION_SECONDS: u64 = 3600;
-
-#[cfg(test)]
-const REQUEUE_DURATION_SECONDS: u64 = 5;
 
 const INGRESS_FINALIZER: &str = "ingress.cloudflare-tunnels-operator.io/finalizer";
 
