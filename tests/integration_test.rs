@@ -432,34 +432,44 @@ async fn test_ingress_controller() {
         assert!(false, "{err:?}");
     }
 
-    tokio::time::sleep(Duration::from_secs(30)).await;
+    let mut retry = 0;
+    loop {
+        retry += 1;
+        match ing_api.get_status(&ingress.name_any()).await {
+            Ok(ing) => {
+                match ing
+                    .status
+                    .and_then(|status| status.load_balancer)
+                    .and_then(|lb| lb.ingress)
+                    .and_then(|ing| ing.first().cloned())
+                    .and_then(|lb| lb.hostname)
+                {
+                    Some(hostname) => {
+                        if hostname != "e2e-test.cfargotunnel.com" {
+                            assert!(false, "expected e2e-test.cfargotunnel.com got {hostname}");
+                        }
 
-    match ing_api.get_status(&ingress.name_any()).await {
-        Ok(ing) => {
-            match ing
-                .status
-                .and_then(|status| status.load_balancer)
-                .and_then(|lb| lb.ingress)
-                .and_then(|ing| ing.first().cloned())
-                .and_then(|lb| lb.hostname)
-            {
-                Some(hostname) => {
-                    if hostname != "e2e-test.cfargotunnel.com" {
-                        assert!(false, "expected e2e-test.cfargotunnel.com got {hostname}");
+                        break;
                     }
-                }
-                None => {
-                    assert!(false, "no ingress status");
-                }
-            };
+                    None => {
+                        assert!(false, "no ingress status");
+                    }
+                };
+            }
+            Err(err) => {
+                assert!(false, "{err:?}");
+            }
         }
-        Err(err) => {
-            assert!(false, "{err:?}");
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        if retry >= 5 {
+            assert!(false, "ingress status not updated");
         }
     }
 
-    list_tunnel_mock.expect_at_least(1).assert_async().await;
-    list_dns_mock.expect_at_least(1).assert_async().await;
+    list_tunnel_mock.assert_async().await;
+    list_dns_mock.assert_async().await;
     create_cname_mock.assert_async().await;
     create_txt_mock.assert_async().await;
 }
