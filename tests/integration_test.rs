@@ -130,7 +130,7 @@ async fn test_ingress_controller() {
         .create_async()
         .await;
 
-    let list_dns_mock = server
+    let list_dns_empty_mock = server
         .mock(
             "GET",
             "/zones/e2e-test-zone/dns_records?name=whoami.example.com",
@@ -143,6 +143,86 @@ async fn test_ingress_controller() {
                 "messages": [],
                 "success": true,
                 "result": []
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let list_dns_existing_mock = server
+        .mock(
+            "GET",
+            "/zones/e2e-test-zone/dns_records?name=whoami.example.com",
+        )
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "errors": [],
+                "messages": [],
+                "success": true,
+                "result": [
+                    {
+                        "name": "whoami.example.com",
+                        "ttl": 3600,
+                        "type": "CNAME",
+                        "comment": "Domain verification record",
+                        "content": "e2e-test.cfargotunnel.com",
+                        "private_routing": true,
+                        "proxied": true,
+                        "settings": {
+                          "ipv4_only": true,
+                          "ipv6_only": true
+                        },
+                        "tags": [
+                          "owner:dns-team"
+                        ],
+                        "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                        "created_on": "2014-01-01T05:20:00.12345Z",
+                        "meta": {
+                          "dead_glue": true,
+                          "is_glue": true,
+                          "shadowed_by": [
+                            "372e67954025e0ba6aaa6d586b9e0b59"
+                          ],
+                          "shadowed_records_count": 42
+                        },
+                        "modified_on": "2014-01-01T05:20:00.12345Z",
+                        "proxiable": true,
+                        "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                        "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                    },
+                    {
+                        "name": "whoami.example.com",
+                        "ttl": 3600,
+                        "type": "TXT",
+                        "comment": "Domain verification record",
+                        "content": "heritage=cloudflare-tunnels-operator,cloudflare-tunnels-operator/owner=default,cloudflare-tunnels-operator/resource=ingress/default/whoami",
+                        "private_routing": true,
+                        "proxied": true,
+                        "settings": {
+                          "ipv4_only": true,
+                          "ipv6_only": true
+                        },
+                        "tags": [
+                          "owner:dns-team"
+                        ],
+                        "id": "023e105f4ecef8ad9ca31a8372d0c353",
+                        "created_on": "2014-01-01T05:20:00.12345Z",
+                        "meta": {
+                          "dead_glue": true,
+                          "is_glue": true,
+                          "shadowed_by": [
+                            "372e67954025e0ba6aaa6d586b9e0b59"
+                          ],
+                          "shadowed_records_count": 42
+                        },
+                        "modified_on": "2014-01-01T05:20:00.12345Z",
+                        "proxiable": true,
+                        "comment_modified_on": "2024-01-01T05:20:00.12345Z",
+                        "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                    }
+                ]
             })
             .to_string(),
         )
@@ -384,7 +464,7 @@ async fn test_ingress_controller() {
                     None => {}
                 };
             }
-            Err(err) => {}
+            Err(_) => {}
         }
 
         tokio::time::sleep(Duration::from_secs(5)).await;
@@ -395,7 +475,8 @@ async fn test_ingress_controller() {
     }
 
     list_tunnel_mock.assert_async().await;
-    list_dns_mock.expect_at_least(1).assert_async().await;
+    list_dns_empty_mock.assert_async().await;
+    list_dns_existing_mock.assert_async().await;
     create_cname_mock.assert_async().await;
     create_txt_mock.assert_async().await;
 }
