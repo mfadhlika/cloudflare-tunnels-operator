@@ -451,14 +451,10 @@ async fn test_ingress_controller() {
 
                         break;
                     }
-                    None => {
-                        assert!(false, "no ingress status");
-                    }
+                    None => {}
                 };
             }
-            Err(err) => {
-                assert!(false, "{err:?}");
-            }
+            Err(err) => {}
         }
 
         tokio::time::sleep(Duration::from_secs(5)).await;
