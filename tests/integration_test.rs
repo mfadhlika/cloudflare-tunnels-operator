@@ -22,7 +22,6 @@ use k8s_openapi::{
 use kube::{
     Api, CustomResourceExt, ResourceExt,
     api::{ListParams, ObjectMeta, PostParams},
-    runtime::reflector::Lookup,
 };
 use mockito::{Matcher, Mock, ServerGuard};
 use serde_json::json;
@@ -32,7 +31,7 @@ async fn setup_create_dns_mock(server: &mut ServerGuard, record_type: &str, cont
         .mock("POST", "/zones/e2e-test-zone/dns_records")
         .match_body(Matcher::Json(json!({
             "proxied": true,
-            "name": "test.example.com",
+            "name": "whoami.example.com",
             "type": record_type,
             "content": content
         })))
@@ -82,6 +81,8 @@ async fn setup_create_dns_mock(server: &mut ServerGuard, record_type: &str, cont
 
 #[tokio::test]
 async fn test_ingress_controller() {
+    env_logger::init();
+
     let mut server = mockito::Server::new_async().await;
 
     // Create a mock
@@ -151,12 +152,12 @@ async fn test_ingress_controller() {
     let create_txt_mock = setup_create_dns_mock(
         &mut server,
         "TXT",
-        "heritage=cloudflare-tunnels-operator,cloudflare-tunnels-operator/owner=default,cloudflare-tunnels-operator/resource=ingress/default/whomai",
+        "heritage=cloudflare-tunnels-operator,cloudflare-tunnels-operator/owner=default,cloudflare-tunnels-operator/resource=ingress/default/whoami",
     )
     .await;
 
     let create_cname_mock =
-        setup_create_dns_mock(&mut server, "CNAME", "1234.cfargotunnel.com").await;
+        setup_create_dns_mock(&mut server, "CNAME", "e2e-test.cfargotunnel.com").await;
 
     let kube_cli = kube::Client::try_default().await.unwrap();
 
@@ -172,7 +173,7 @@ async fn test_ingress_controller() {
 
     let ctx = Arc::new(Context {
         kube_cli: kube_cli.clone(),
-        ingress_class: None,
+        ingress_class: Some("cloudflare-tunnels".to_string()),
         disable_dns: None,
         owner: None,
         cloudflared_version: "latest".to_string(),
@@ -373,8 +374,8 @@ async fn test_ingress_controller() {
                 .and_then(|lb| lb.hostname)
             {
                 Some(hostname) => {
-                    if hostname != "e2e-tunnel.cfargotunnel.com" {
-                        assert!(false, "expected e2e-tunnel.cfargotunnel.com got {hostname}");
+                    if hostname != "e2e-test.cfargotunnel.com" {
+                        assert!(false, "expected e2e-test.cfargotunnel.com got {hostname}");
                     }
                 }
                 None => {
@@ -387,8 +388,8 @@ async fn test_ingress_controller() {
         }
     }
 
-    list_tunnel_mock.assert_async().await;
-    list_dns_mock.assert_async().await;
+    list_tunnel_mock.expect_at_least(1).assert_async().await;
+    list_dns_mock.expect_at_least(1).assert_async().await;
     create_cname_mock.assert_async().await;
     create_txt_mock.assert_async().await;
 }

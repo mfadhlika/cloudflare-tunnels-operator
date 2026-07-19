@@ -14,7 +14,7 @@ use kube::{
     api::{ListParams, ObjectMeta, Patch, PatchParams},
     runtime::{Controller, controller::Action, finalizer, watcher},
 };
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 
 use crate::{
     ClusterTunnel,
@@ -162,6 +162,7 @@ async fn cleanup_dns_records(
 }
 
 async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
+    info!("starting reconcile applying: {}", obj.name_any());
     if obj
         .annotations()
         .get("kubernetes.io/ingress.class")
@@ -416,6 +417,8 @@ async fn cleanup(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> 
         return Err(Error::Other(anyhow!("no clustertunnel found")));
     };
 
+    debug!("found tunnel {tunnel_name}");
+
     let config_name = format!("cloudflared-{tunnel_name}-config");
     let config_map = cm_api.get(&config_name).await?;
     let mut config = config_map
@@ -424,6 +427,8 @@ async fn cleanup(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> 
         .and_then(|data| data.get("config.yaml"))
         .and_then(|cfg| serde_yaml::from_str::<TunnelConfig>(cfg).ok())
         .ok_or_else(|| anyhow!("no data"))?;
+
+    debug!("found config {config_name}");
 
     let cloudflare_client = &ctx.cloudflare_client;
 
@@ -436,12 +441,11 @@ async fn cleanup(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> 
     );
 
     let Some(spec) = obj.spec.as_ref() else {
-        return Ok(Action::requeue(Duration::from_secs(
-            REQUEUE_DURATION_SECONDS,
-        )));
+        return Err(Error::Other(anyhow!("no spec found")));
     };
 
     for rule in spec.rules.iter().flatten() {
+        debug!("processing rule: {}", rule.host.as_ref().unwrap());
         for ingress_path in rule
             .http
             .as_ref()
