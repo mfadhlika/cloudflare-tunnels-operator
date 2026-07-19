@@ -2,19 +2,39 @@ name: Create and publish a Docker image
 
 on:
   push:
-    branches: ['main']
+    branches: ['*']
     tags: ['v*.*.*']
     paths:
+      - .github/**
       - src/**
       - Cargo.toml
       - Cargo.lock
+      - tests/**
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  tests:
+    runs-on: ubuntu-latest
+    env:
+      RUST_LOG: debug
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Kubernetes KinD Cluster
+        id: kind
+        uses: helm/kind-action@v1
+
+      - name: Cargo test
+        run: cargo test
+
   build:
+    if: ${{ github.ref_name == 'main' || startsWith(github.ref, 'refs/tags/v')}}
+    needs:
+      - tests
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
