@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use cloudflare::framework::Environment;
 use cloudflare_tunnels_operator::{
     ClusterTunnel, Context,
+    cloudflare::TunnelConfig,
     controller::{
         self,
         clustertunnel::{ClusterTunnelSpec, SecretRef},
@@ -474,7 +475,34 @@ async fn test_ingress_controller() {
         }
     }
 
-    list_tunnel_mock.assert_async().await;
+    match cm_api
+        .list(&ListParams::default().fields("metadata.name=cloudflared-e2e-test-config"))
+        .await
+        .ok()
+        .and_then(|cfg| cfg.items.first().cloned())
+        .and_then(|cfg| cfg.data)
+        .and_then(|cfg| cfg.get("config.yaml").cloned())
+        .and_then(|cfg| serde_yaml::from_str::<TunnelConfig>(&cfg).ok())
+    {
+        Some(config) => {
+            if config
+                .ingress
+                .iter()
+                .find(|ing| {
+                    ing.hostname == Some("whoami.example.com".to_string())
+                        && ing.service == "http://whoami.default.svc:80"
+                })
+                .is_none()
+            {
+                assert!(false, "ingress not updated in cloudflared config.yaml")
+            }
+        }
+        None => {
+            assert!(false, "no config found");
+        }
+    };
+
+    list_tunnel_mock.expect_at_least(1).assert_async().await;
     list_dns_empty_mock.assert_async().await;
     list_dns_existing_mock.assert_async().await;
     create_cname_mock.assert_async().await;
