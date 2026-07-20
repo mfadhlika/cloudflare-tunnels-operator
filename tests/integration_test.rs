@@ -475,7 +475,7 @@ async fn test_ingress_controller() {
         }
     }
 
-    let Some(config) = cm_api
+    match cm_api
         .list(&ListParams::default().fields("metadata.name=cloudflared-e2e-test-config"))
         .await
         .ok()
@@ -483,22 +483,24 @@ async fn test_ingress_controller() {
         .and_then(|cfg| cfg.data)
         .and_then(|cfg| cfg.get("config.yaml").cloned())
         .and_then(|cfg| serde_yaml::from_str::<TunnelConfig>(&cfg).ok())
-    else {
-        assert!(false, "no config found");
-        return;
-    };
-
-    if config
-        .ingress
-        .iter()
-        .find(|ing| {
-            ing.hostname == Some("whoami.example.com".to_string())
-                && ing.service == "http://whoami.default.svc:80"
-        })
-        .is_none()
     {
-        assert!(false, "ingress not updated in cloudflared config.yaml")
-    }
+        Some(config) => {
+            if config
+                .ingress
+                .iter()
+                .find(|ing| {
+                    ing.hostname == Some("whoami.example.com".to_string())
+                        && ing.service == "http://whoami.default.svc:80"
+                })
+                .is_none()
+            {
+                assert!(false, "ingress not updated in cloudflared config.yaml")
+            }
+        }
+        None => {
+            assert!(false, "no config found");
+        }
+    };
 
     list_tunnel_mock.expect_at_least(1).assert_async().await;
     list_dns_empty_mock.assert_async().await;
