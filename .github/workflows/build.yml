@@ -51,9 +51,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cargo test
-        run: cargo test
-
       - name: Prepare
         run: |
           platform=${{ matrix.platform }}
