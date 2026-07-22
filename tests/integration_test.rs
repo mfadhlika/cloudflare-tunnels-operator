@@ -265,7 +265,10 @@ async fn test_ingress_controller() {
             })
             .is_none()
         {
-            assert!(false, "ingress not updated in cloudflared config.yaml")
+            assert!(
+                false,
+                "ingress not updated in cloudflared config.yaml, got {config:?}"
+            );
         }
     } else {
         assert!(false, "no config found");
