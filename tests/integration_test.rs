@@ -249,7 +249,7 @@ async fn test_ingress_controller() {
     }
 
     if let Some(config) = cm_api
-        .get(format!("loudflared-{tunnel_name}-config").as_str())
+        .get(format!("cloudflared-{tunnel_name}-config").as_str())
         .await
         .ok()
         .and_then(|cfg| cfg.data)
