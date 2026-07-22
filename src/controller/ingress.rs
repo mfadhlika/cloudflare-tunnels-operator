@@ -319,24 +319,13 @@ async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
     let config_yaml = serde_yaml::to_string(&config).unwrap();
     let config_hash = sha256::digest(&config_yaml);
 
-    /*
-    name: Some(config_name.to_string()),
-    namespace: Some(ns.to_owned()),
-    owner_references: Some(oref.to_vec()),
-     */
     let config_map = ConfigMap {
-        metadata: ObjectMeta {
-            name: Some(config_map.name_any()),
-            namespace: config_map.namespace(),
-            owner_references: Some(config_map.owner_references().to_vec()),
-            ..ObjectMeta::default()
-        },
         data: Some({
             let mut map = BTreeMap::new();
             map.insert("config.yaml".to_string(), config_yaml);
             map
         }),
-        ..config_map.clone()
+        ..config_map
     };
 
     cm_api
