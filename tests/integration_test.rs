@@ -155,7 +155,7 @@ async fn test_ingress_controller() {
 
     if wait_for_resource(
         &cm_api,
-        format!("metadata.name=cloudflared-{tunnel_name}-config").as_str(),
+        format!("cloudflared-{tunnel_name}-config").as_str(),
     )
     .await
     .is_none()
@@ -229,8 +229,7 @@ async fn test_ingress_controller() {
     if let Err(err) = ing_api.create(&PostParams::default(), &ingress).await {
         assert!(false, "{err:?}");
     }
-    match wait_for_resource_status(&ing_api, &format!("metadata.name={}", ingress.name_any())).await
-    {
+    match wait_for_resource_status(&ing_api, &ingress.name_any()).await {
         Some(ing) => {
             if let Some(hostname) = ing
                 .status
