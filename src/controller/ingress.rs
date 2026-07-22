@@ -332,7 +332,7 @@ async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
         .patch(
             &config_map.name_any(),
             &PatchParams::apply(OPERATOR_MANAGER),
-            &Patch::Apply(&config_map),
+            &Patch::Merge(&config_map),
         )
         .await?;
 
