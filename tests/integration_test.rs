@@ -319,7 +319,10 @@ async fn test_ingress_controller() {
 
     list_tunnel_mock.expect_at_least(1).assert_async().await;
     list_dns_empty_mock.assert_async().await;
-    list_dns_existing_mock.assert_async().await;
+    list_dns_existing_mock
+        .expect_at_least(2)
+        .assert_async()
+        .await;
     create_cname_mock.assert_async().await;
     create_txt_mock.assert_async().await;
     delete_txt_mock.assert_async().await;
