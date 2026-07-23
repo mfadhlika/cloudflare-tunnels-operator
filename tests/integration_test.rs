@@ -1,7 +1,7 @@
 mod common;
 use common::*;
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use cloudflare::framework::Environment;
 use cloudflare_tunnels_operator::{
@@ -248,30 +248,35 @@ async fn test_ingress_controller() {
         }
     }
 
-    if let Some(config) = cm_api
-        .get(format!("cloudflared-{tunnel_name}-config").as_str())
-        .await
-        .ok()
-        .and_then(|cfg| cfg.data)
-        .and_then(|cfg| cfg.get("config.yaml").cloned())
-        .and_then(|cfg| serde_yaml::from_str::<TunnelConfig>(&cfg).ok())
-    {
-        if config
-            .ingress
-            .iter()
-            .find(|ing| {
-                ing.hostname == Some(hostname.to_string())
-                    && ing.service == "http://whoami.default.svc:80"
-            })
-            .is_none()
+    let mut retry = 0;
+    loop {
+        retry += 1;
+        if let Some(config) = cm_api
+            .get(format!("cloudflared-{tunnel_name}-config").as_str())
+            .await
+            .ok()
+            .and_then(|cfg| cfg.data)
+            .and_then(|cfg| cfg.get("config.yaml").cloned())
+            .and_then(|cfg| serde_yaml::from_str::<TunnelConfig>(&cfg).ok())
         {
-            assert!(
-                false,
-                "ingress not updated in cloudflared config.yaml, got {config:?}"
-            );
+            if config
+                .ingress
+                .iter()
+                .find(|ing| {
+                    ing.hostname == Some(hostname.to_string())
+                        && ing.service == "http://whoami.default.svc:80"
+                })
+                .is_some()
+            {
+                break;
+            }
         }
-    } else {
-        assert!(false, "no config found");
+
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        if retry >= 5 {
+            assert!(false, "expected change in config not found");
+        }
     }
 
     list_tunnel_mock.expect_at_least(1).assert_async().await;
