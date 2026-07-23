@@ -18,7 +18,7 @@ pub async fn setup_list_dns_mock(
     server: &mut ServerGuard,
     zone_id: &str,
     name: &str,
-    records: Vec<(String, String, String)>,
+    records: Vec<(String, String, String, String)>,
 ) -> Mock {
     let results = records
         .iter()
@@ -38,7 +38,7 @@ pub async fn setup_list_dns_mock(
                 "tags": [
                   "owner:dns-team"
                 ],
-                "id": format!("{}-{}-{}", record.0, record.1, record.2),
+                "id": record.3,
                 "created_on": "2014-01-01T05:20:00.12345Z",
                 "meta": {
                   "dead_glue": true,
@@ -126,6 +126,30 @@ pub async fn setup_create_dns_mock(
                     "proxiable": true,
                     "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                     "tags_modified_on": "2025-01-01T05:20:00.12345Z"
+                }
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+}
+
+pub async fn setup_delete_dns_mock(
+    server: &mut ServerGuard,
+    zone_id: &str,
+    record_id: &str,
+) -> Mock {
+    return server
+        .mock(
+            "DELETE",
+            format!("/zones/{zone_id}/dns_records/{record_id}").as_str(),
+        )
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(
+            json!({
+                "result": {
+                    "id": record_id
                 }
             })
             .to_string(),

@@ -56,11 +56,13 @@ async fn test_ingress_controller() {
                 hostname.to_string(),
                 "CNAME".to_string(),
                 cname_record.to_string(),
+                "023e105f4ecef8ad9ca31a8372d0c353".to_string(),
             ),
             (
                 hostname.to_string(),
                 "TXT".to_string(),
                 txt_record.to_string(),
+                "023e105f4ecef8ad9ca31a8372d0c354".to_string(),
             ),
         ],
     )
@@ -70,6 +72,11 @@ async fn test_ingress_controller() {
 
     let create_cname_mock =
         setup_create_dns_mock(&mut server, zone_id, "CNAME", cname_record).await;
+
+    let delete_txt_mock =
+        setup_delete_dns_mock(&mut server, zone_id, "023e105f4ecef8ad9ca31a8372d0c353").await;
+    let delete_cname_mock =
+        setup_delete_dns_mock(&mut server, zone_id, "023e105f4ecef8ad9ca31a8372d0c354").await;
 
     let kube_cli = kube::Client::try_default().await.unwrap();
 
@@ -279,29 +286,42 @@ async fn test_ingress_controller() {
         }
     }
 
+    if let Err(err) = ing_api
+        .delete_collection(
+            &DeleteParams::default(),
+            &ListParams::default().labels("test-resource=true"),
+        )
+        .await
+    {
+        assert!(false, "failed to delete ingress: {err:?}");
+    }
+
+    if let Err(err) = svc_api
+        .delete_collection(
+            &DeleteParams::default(),
+            &ListParams::default().labels("test-resource=true"),
+        )
+        .await
+    {
+        assert!(false, "failed to delete service: {err:?}");
+    }
+
+    if let Err(err) = ct_api.delete(tunnel_name, &DeleteParams::default()).await {
+        assert!(false, "failed to delete cluster tunnel: {err:?}");
+    }
+
+    if let Err(err) = sec_api
+        .delete("cloudflared-secret", &DeleteParams::default())
+        .await
+    {
+        assert!(false, "failed to delete secret: {err:?}");
+    }
+
     list_tunnel_mock.expect_at_least(1).assert_async().await;
     list_dns_empty_mock.assert_async().await;
     list_dns_existing_mock.assert_async().await;
     create_cname_mock.assert_async().await;
     create_txt_mock.assert_async().await;
-
-    let _ = ing_api
-        .delete_collection(
-            &DeleteParams::default(),
-            &ListParams::default().labels("test-resource=true"),
-        )
-        .await;
-
-    let _ = svc_api
-        .delete_collection(
-            &DeleteParams::default(),
-            &ListParams::default().labels("test-resource=true"),
-        )
-        .await;
-
-    let _ = ct_api.delete(tunnel_name, &DeleteParams::default()).await;
-
-    let _ = sec_api
-        .delete("cloudflared-secret", &DeleteParams::default())
-        .await;
+    delete_txt_mock.assert_async().await;
+    delete_cname_mock.assert_async().await;
 }
