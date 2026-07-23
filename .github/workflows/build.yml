@@ -19,7 +19,7 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     env:
-      RUST_LOG: cloudflare_tunnels_operator=debug
+      RUST_LOG: cloudflare_tunnels_operator=debug,mockito=debug
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
