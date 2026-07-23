@@ -328,6 +328,7 @@ async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
         ..config_map
     };
 
+    debug!("updating ingress config...");
     cm_api
         .patch(
             &config_map.name_any(),
@@ -336,19 +337,22 @@ async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
         )
         .await?;
 
+    debug!("updating cloudflared deployment...");
     patch_deployment(&deploy_api, config_hash).await?;
 
-    let mut ing = ing_api.get_status(&obj.name_any()).await?;
-
-    ing.status = Some(IngressStatus {
-        load_balancer: Some(IngressLoadBalancerStatus {
-            ingress: Some(vec![IngressLoadBalancerIngress {
-                hostname: Some(format!("{}.cfargotunnel.com", config.tunnel)),
-                ..IngressLoadBalancerIngress::default()
-            }]),
+    let ing = Ingress {
+        status: Some(IngressStatus {
+            load_balancer: Some(IngressLoadBalancerStatus {
+                ingress: Some(vec![IngressLoadBalancerIngress {
+                    hostname: Some(format!("{}.cfargotunnel.com", config.tunnel)),
+                    ..IngressLoadBalancerIngress::default()
+                }]),
+            }),
         }),
-    });
+        ..ing_api.get_status(&obj.name_any()).await?
+    };
 
+    debug!("updating ingress status...");
     ing_api
         .patch_status(
             &ing.name_any(),
