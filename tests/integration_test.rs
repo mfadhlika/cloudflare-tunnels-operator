@@ -5,7 +5,7 @@ use testcontainers_modules::{
     testcontainers::{ImageExt, runners::AsyncRunner},
 };
 
-use std::{collections::BTreeMap, env::temp_dir, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, env::temp_dir, os, sync::Arc, time::Duration};
 
 use cloudflare::framework::Environment;
 use cloudflare_tunnels_operator::{
@@ -77,8 +77,11 @@ async fn test_ingress_controller_empty_records() {
     let create_cname_mock =
         setup_create_dns_mock(&mut server, zone_id, "CNAME", cname_record).await;
 
+    let conf_mount = temp_dir().join("k3s");
+    std::fs::create_dir(&conf_mount).expect("failed to created temp dir");
+
     let k3s = testcontainers_modules::k3s::K3s::default()
-        .with_conf_mount(temp_dir().join("k3s"))
+        .with_conf_mount(conf_mount)
         .with_privileged(true)
         .with_userns_mode("host")
         .start()
