@@ -1,11 +1,12 @@
 mod common;
 use common::*;
+use mockito::Mock;
 use testcontainers_modules::{
     k3s::KUBE_SECURE_PORT,
     testcontainers::{ImageExt, runners::AsyncRunner},
 };
 
-use std::{collections::BTreeMap, env::temp_dir, os, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, env::temp_dir, sync::Arc, time::Duration};
 
 use cloudflare::framework::Environment;
 use cloudflare_tunnels_operator::{
@@ -28,54 +29,69 @@ use kube::{
     api::{ObjectMeta, PostParams},
 };
 
-#[tokio::test]
-async fn test_ingress_controller_empty_records() {
-    env_logger::try_init().expect("failed to init env logger");
+use crate::common::cloudflare_mock::CloudflareMock;
 
+async fn test_ingress_controller(cluster: &str) {
     let account_id = "e2e-test-account";
     let zone_id = "e2e-test-zone";
     let tunnel_name = "e2e-tunnel";
     let hostname = "whoami.example.com";
     let cname_record = "e2e-test.cfargotunnel.com";
-    let txt_record = "heritage=cloudflare-tunnels-operator,cloudflare-tunnels-operator/owner=default,cloudflare-tunnels-operator/resource=ingress/default/whoami";
+    let txt_record = format!(
+        "heritage=cloudflare-tunnels-operator,cloudflare-tunnels-operator/owner={cluster},cloudflare-tunnels-operator/resource=ingress/default/whoami"
+    );
 
-    let mut server = mockito::Server::new_async().await;
+    let mut cloudflare_mock = CloudflareMock::new().await;
 
     // Create a mock
-    let list_tunnel_mock = setup_list_tunnels_mock(
-        &mut server,
-        account_id,
-        tunnel_name,
-        vec![tunnel_name.to_string()],
-    )
-    .await;
+    cloudflare_mock
+        .setup_list_tunnels_mock(
+            account_id,
+            tunnel_name,
+            vec![tunnel_name.to_string()],
+            |mock: Mock| async move { mock.expect_at_least(1).assert_async().await },
+        )
+        .await;
 
-    let list_dns_empty_mock = setup_list_dns_mock(&mut server, zone_id, hostname, vec![]).await;
-    let list_dns_existing_mock = setup_list_dns_mock(
-        &mut server,
-        zone_id,
-        hostname,
-        vec![
-            (
-                hostname.to_string(),
-                "CNAME".to_string(),
-                cname_record.to_string(),
-                "023e105f4ecef8ad9ca31a8372d0c353".to_string(),
-            ),
-            (
-                hostname.to_string(),
-                "TXT".to_string(),
-                txt_record.to_string(),
-                "023e105f4ecef8ad9ca31a8372d0c354".to_string(),
-            ),
-        ],
-    )
-    .await;
+    cloudflare_mock
+        .setup_list_dns_mock(zone_id, hostname, vec![], |mock: Mock| async move {
+            mock.assert_async().await
+        })
+        .await;
 
-    let create_txt_mock = setup_create_dns_mock(&mut server, zone_id, "TXT", txt_record).await;
+    cloudflare_mock
+        .setup_list_dns_mock(
+            zone_id,
+            hostname,
+            vec![
+                (
+                    hostname.to_string(),
+                    "CNAME".to_string(),
+                    cname_record.to_string(),
+                    "023e105f4ecef8ad9ca31a8372d0c353".to_string(),
+                ),
+                (
+                    hostname.to_string(),
+                    "TXT".to_string(),
+                    txt_record.to_string(),
+                    "023e105f4ecef8ad9ca31a8372d0c354".to_string(),
+                ),
+            ],
+            |mock: Mock| async move { mock.assert_async().await },
+        )
+        .await;
 
-    let create_cname_mock =
-        setup_create_dns_mock(&mut server, zone_id, "CNAME", cname_record).await;
+    cloudflare_mock
+        .setup_create_dns_mock(zone_id, "TXT", &txt_record, |mock: Mock| async move {
+            mock.assert_async().await
+        })
+        .await;
+
+    cloudflare_mock
+        .setup_create_dns_mock(zone_id, "CNAME", cname_record, |mock: Mock| async move {
+            mock.assert_async().await
+        })
+        .await;
 
     let conf_mount = temp_dir().join("k3s");
     std::fs::create_dir(&conf_mount).expect("failed to created temp dir");
@@ -115,7 +131,7 @@ async fn test_ingress_controller_empty_records() {
         cloudflare_tunnels_operator::cloudflare::Credentials::UserAuthToken {
             token: "e2e-test-token".to_string(),
         },
-        Environment::Custom(server.url()),
+        Environment::Custom(cloudflare_mock.url()),
     )
     .unwrap();
 
@@ -315,9 +331,12 @@ async fn test_ingress_controller_empty_records() {
         }
     }
 
-    list_tunnel_mock.expect_at_least(1).assert_async().await;
-    list_dns_empty_mock.assert_async().await;
-    list_dns_existing_mock.assert_async().await;
-    create_cname_mock.assert_async().await;
-    create_txt_mock.assert_async().await;
+    cloudflare_mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn test_ingress_controller_single_cluster() {
+    env_logger::try_init().expect("failed to init env logger");
+
+    test_ingress_controller("default").await;
 }
