@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUST_LOG: cloudflare_tunnels_operator=debug,mockito=debug
-      TMPDIR: '${{ runner.temp }}'
+      TMPDIR: '${{ github.env.RUNNER_TEMP }}'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
