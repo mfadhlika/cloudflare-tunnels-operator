@@ -14,7 +14,6 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  TMPDIR: ${{ runner.temp }}
 
 jobs:
   tests:
@@ -27,6 +26,9 @@ jobs:
 
       - name: Set up Docker
         uses: docker/setup-docker-action@v5
+
+      - name: Set TMPDIR
+        run: echo "TMPDIR=${{ runner.temp }}" >> "$GITHUB_ENV"
 
       - name: Cargo test
         run: cargo test
