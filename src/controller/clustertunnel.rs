@@ -379,6 +379,11 @@ impl ClusterTunnel {
     pub async fn cleanup(&self, ctx: Arc<Context>) -> Result<Action, Error> {
         let cf_cli = &ctx.cloudflare_client;
 
+        // if tunnel secret ref is provided, don't delete tunnel
+        if self.spec.tunnel_secret_ref.is_some() {
+            return Ok(Action::requeue(Duration::from_secs(3600)));
+        }
+
         let tunnel_name = self.spec.name.clone().unwrap_or_else(|| self.name_any());
         let Some(tunnel_id) = cf_cli.find_tunnel(&tunnel_name).await? else {
             return Ok(Action::requeue(Duration::from_secs(3600)));
