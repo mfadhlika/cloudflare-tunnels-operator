@@ -68,10 +68,10 @@ spec:
             valueFrom:
               secretKeyRef: {{- toYaml .Values.cloudflare.apiTokenSecretRef | nindent 16 }}
           {{- end }}
-          {{- if .Values.cloudflare.apiAuthKeySecretRef }}
+          {{- if .Values.cloudflare.apiKeySecretRef }}
           - name: CLOUDFLARE_API_KEY
             valueFrom:
-              secretKeyRef: {{- toYaml .Values.cloudflare.apiAuthKeySecretRef | nindent 16  }}
+              secretKeyRef: {{- toYaml .Values.cloudflare.apiKeySecretRef | nindent 16  }}
           {{- end }}
           ports:
             - name: http
