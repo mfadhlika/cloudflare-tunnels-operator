@@ -43,13 +43,13 @@ spec:
             - "--cloudflare-zone-id"
             - "{{ .Values.cloudflare.zoneId }}"
             {{- if .Values.cloudflare.apiTokenSecretRef }}
-            - "--cloudflare-auth-token"
+            - "--cloudflare-token"
             - "$(CLOUDFLARE_TOKEN)"
             {{- end }}
-            {{- if .Values.cloudflare.apiAuthKeySecretRef }}
+            {{- if .Values.cloudflare.apiKeySecretRef }}
             -- "--cloudflare-email"
             - "{{ .Values.cloudflare.email }}"
-            - "--cloudflare-auth-token"
+            - "--cloudflare-api-key"
             - "$(CLOUDFLARE_API_KEY)"
             {{- end }}
             {{- if .Values.cloudflared.tag }}
