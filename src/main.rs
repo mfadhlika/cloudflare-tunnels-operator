@@ -50,7 +50,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         cloudflare::Credentials::UserAuthKey { email, key }
     } else {
-        return Err(anyhow::anyhow!("api key requires email").into());
+        return Err(anyhow::anyhow!("no cloudflare credentials supplied").into());
     };
 
     let cloudflare_client = cloudflare::Client::new(
