@@ -17,7 +17,7 @@ struct Args {
     #[arg(long)]
     cloudflare_zone_id: String,
     #[arg(long)]
-    cloudflare_api_token: Option<String>,
+    cloudflare_token: Option<String>,
     #[arg(long)]
     cloudflare_email: Option<String>,
     #[arg(long)]
@@ -41,7 +41,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let kube_cli = kube::Client::try_default().await?;
 
-    let cloudflare_credentials = if let Some(token) = args.cloudflare_api_token {
+    let cloudflare_credentials = if let Some(token) = args.cloudflare_token {
         cloudflare::Credentials::UserAuthToken { token }
     } else if let Some(key) = args.cloudflare_api_key {
         let Some(email) = args.cloudflare_email else {
