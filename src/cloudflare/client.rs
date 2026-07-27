@@ -117,7 +117,12 @@ impl Client {
         let endpoint = cloudflare::endpoints::dns::dns::CreateDnsRecord {
             zone_identifier: &self.zone_id,
             params: cloudflare::endpoints::dns::dns::CreateDnsRecordParams {
-                proxied: Some(true),
+                proxied: Some(matches!(
+                    content,
+                    cloudflare::endpoints::dns::dns::DnsContent::A { .. }
+                        | cloudflare::endpoints::dns::dns::DnsContent::AAAA { .. }
+                        | cloudflare::endpoints::dns::dns::DnsContent::CNAME { .. }
+                )),
                 name: hostname,
                 content,
                 ttl: None,
