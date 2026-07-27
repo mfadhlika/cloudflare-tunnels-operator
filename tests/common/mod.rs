@@ -30,7 +30,7 @@ pub async fn setup_list_dns_mock(
                 "comment": "Domain verification record",
                 "content": record.2,
                 "private_routing": true,
-                "proxied": true,
+                "proxied": record.1 == "CNAME",
                 "settings": {
                   "ipv4_only": true,
                   "ipv6_only": true
@@ -49,7 +49,7 @@ pub async fn setup_list_dns_mock(
                   "shadowed_records_count": 42
                 },
                 "modified_on": "2014-01-01T05:20:00.12345Z",
-                "proxiable": true,
+                "proxiable": record.1 == "CNAME",
                 "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                 "tags_modified_on": "2025-01-01T05:20:00.12345Z"
             })
@@ -85,7 +85,7 @@ pub async fn setup_create_dns_mock(
     return server
         .mock("POST", format!("/zones/{zone_id}/dns_records").as_str())
         .match_body(Matcher::Json(json!({
-            "proxied": true,
+            "proxied": record_type == "CNAME",
             "name": "whoami.example.com",
             "type": record_type,
             "content": content
@@ -104,7 +104,7 @@ pub async fn setup_create_dns_mock(
                     "comment": "Domain verification record",
                     "content": content,
                     "private_routing": true,
-                    "proxied": true,
+                    "proxied": record_type == "CNAME",
                     "settings": {
                       "ipv4_only": true,
                       "ipv6_only": true
@@ -123,7 +123,7 @@ pub async fn setup_create_dns_mock(
                       "shadowed_records_count": 42
                     },
                     "modified_on": "2014-01-01T05:20:00.12345Z",
-                    "proxiable": true,
+                    "proxiable": record_type == "CNAME",
                     "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                     "tags_modified_on": "2025-01-01T05:20:00.12345Z"
                 }

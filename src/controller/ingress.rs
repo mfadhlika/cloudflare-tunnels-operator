@@ -568,7 +568,7 @@ mod tests {
         return server
             .mock("POST", "/zones/test-zone/dns_records")
             .match_body(Matcher::Json(json!({
-                "proxied": true,
+                "proxied": record_type == "CNAME",
                 "name": "test.example.com",
                 "type": record_type,
                 "content": content
@@ -587,7 +587,7 @@ mod tests {
                         "comment": "Domain verification record",
                         "content": content,
                         "private_routing": true,
-                        "proxied": true,
+                        "proxied": record_type == "CNAME",
                         "settings": {
                           "ipv4_only": true,
                           "ipv6_only": true
@@ -606,7 +606,7 @@ mod tests {
                           "shadowed_records_count": 42
                         },
                         "modified_on": "2014-01-01T05:20:00.12345Z",
-                        "proxiable": true,
+                        "proxiable": record_type == "CNAME",
                         "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                         "tags_modified_on": "2025-01-01T05:20:00.12345Z"
                     }
@@ -775,7 +775,7 @@ mod tests {
                           "comment": "Domain verification record",
                           "content": txt,
                           "private_routing": true,
-                          "proxied": true,
+                          "proxied": false,
                           "settings": {
                             "ipv4_only": true,
                             "ipv6_only": true
@@ -794,7 +794,7 @@ mod tests {
                             "shadowed_records_count": 42
                           },
                           "modified_on": "2014-01-01T05:20:00.12345Z",
-                          "proxiable": true,
+                          "proxiable": false,
                           "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                           "tags_modified_on": "2025-01-01T05:20:00.12345Z"
                         }
@@ -884,7 +884,7 @@ mod tests {
                           "comment": "Domain verification record",
                           "content": txt,
                           "private_routing": true,
-                          "proxied": true,
+                          "proxied": false,
                           "settings": {
                             "ipv4_only": true,
                             "ipv6_only": true
@@ -903,7 +903,7 @@ mod tests {
                             "shadowed_records_count": 42
                           },
                           "modified_on": "2014-01-01T05:20:00.12345Z",
-                          "proxiable": true,
+                          "proxiable": false,
                           "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                           "tags_modified_on": "2025-01-01T05:20:00.12345Z"
                         }
@@ -989,7 +989,7 @@ mod tests {
                           "comment": "Domain verification record",
                           "content": "different-txt",
                           "private_routing": true,
-                          "proxied": true,
+                          "proxied": false,
                           "settings": {
                             "ipv4_only": true,
                             "ipv6_only": true
@@ -1008,7 +1008,7 @@ mod tests {
                             "shadowed_records_count": 42
                           },
                           "modified_on": "2014-01-01T05:20:00.12345Z",
-                          "proxiable": true,
+                          "proxiable": false,
                           "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                           "tags_modified_on": "2025-01-01T05:20:00.12345Z"
                         }
@@ -1093,7 +1093,7 @@ mod tests {
                           "comment": "Domain verification record",
                           "content": txt,
                           "private_routing": true,
-                          "proxied": true,
+                          "proxied": false,
                           "settings": {
                             "ipv4_only": true,
                             "ipv6_only": true
@@ -1112,7 +1112,7 @@ mod tests {
                             "shadowed_records_count": 42
                           },
                           "modified_on": "2014-01-01T05:20:00.12345Z",
-                          "proxiable": true,
+                          "proxiable": false,
                           "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                           "tags_modified_on": "2025-01-01T05:20:00.12345Z"
                         }
@@ -1237,7 +1237,7 @@ mod tests {
                           "comment": "Domain verification record",
                           "content": txt,
                           "private_routing": true,
-                          "proxied": true,
+                          "proxied": false,
                           "settings": {
                             "ipv4_only": true,
                             "ipv6_only": true
@@ -1256,7 +1256,7 @@ mod tests {
                             "shadowed_records_count": 42
                           },
                           "modified_on": "2014-01-01T05:20:00.12345Z",
-                          "proxiable": true,
+                          "proxiable": false,
                           "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                           "tags_modified_on": "2025-01-01T05:20:00.12345Z"
                         },
@@ -1267,7 +1267,7 @@ mod tests {
                           "comment": "Domain verification record",
                           "content": "different-txt",
                           "private_routing": true,
-                          "proxied": true,
+                          "proxied": false,
                           "settings": {
                             "ipv4_only": true,
                             "ipv6_only": true
@@ -1286,7 +1286,7 @@ mod tests {
                             "shadowed_records_count": 42
                           },
                           "modified_on": "2014-01-01T05:20:00.12345Z",
-                          "proxiable": true,
+                          "proxiable": false,
                           "comment_modified_on": "2024-01-01T05:20:00.12345Z",
                           "tags_modified_on": "2025-01-01T05:20:00.12345Z"
                         }
