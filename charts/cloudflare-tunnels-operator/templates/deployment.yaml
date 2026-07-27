@@ -47,7 +47,7 @@ spec:
             - "$(CLOUDFLARE_TOKEN)"
             {{- end }}
             {{- if .Values.cloudflare.apiKeySecretRef }}
-            -- "--cloudflare-email"
+            - "--cloudflare-email"
             - "{{ .Values.cloudflare.email }}"
             - "--cloudflare-api-key"
             - "$(CLOUDFLARE_API_KEY)"
