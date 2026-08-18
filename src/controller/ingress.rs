@@ -320,6 +320,10 @@ async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
     let config_hash = sha256::digest(&config_yaml);
 
     let config_map = ConfigMap {
+        metadata: ObjectMeta {
+            managed_fields: None,
+            ..config_map.metadata.clone()
+        },
         data: Some({
             let mut map = BTreeMap::new();
             map.insert("config.yaml".to_string(), config_yaml);
@@ -473,7 +477,7 @@ async fn cleanup(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> 
             map.insert("config.yaml".to_string(), config_yaml);
             map
         }),
-        ..config_map.clone()
+        ..config_map
     };
 
     cm_api
