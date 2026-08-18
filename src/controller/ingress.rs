@@ -18,7 +18,10 @@ use log::{debug, error, info, warn};
 
 use crate::{
     ClusterTunnel,
-    cloudflare::{Client as CloudflareClient, TunnelConfig, TunnelIngress, dns::dns::DnsContent},
+    cloudflare::{
+        Client as CloudflareClient, OriginRequest, TunnelConfig, TunnelIngress,
+        dns::dns::DnsContent,
+    },
     context::Context,
     controller::utils::*,
     error::Error,
@@ -257,11 +260,16 @@ async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
 
             let svc = svc_api.get(&ing_svc_backend.name).await?;
 
-            let scheme = svc
-                .annotations()
+            let svc_annotations = svc.annotations();
+
+            let scheme = svc_annotations
                 .get(ANNOTATION_SERVER_SCHEME)
                 .cloned()
                 .unwrap_or_else(|| "http".to_string());
+
+            let no_tls_verify = svc_annotations
+                .get(ANNOTATION_ORIGIN_REQUEST_NO_TLS_VERIFY)
+                .and_then(|value| Some(value == "true"));
 
             let svc_backend_port = ing_svc_backend
                 .port
@@ -287,11 +295,16 @@ async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
                 obj.namespace().unwrap_or_else(|| "default".to_string()),
             );
 
+            let mut origin_request: Option<OriginRequest> = None;
+            if no_tls_verify.is_some() {
+                origin_request.get_or_insert_default().no_tls_verify = no_tls_verify;
+            }
+
             let ing = TunnelIngress {
                 hostname: rule.host.clone(),
                 path,
                 service: service.clone(),
-                origin_request: None,
+                origin_request,
             };
 
             if let Some(index) = config.ingress.iter().position(|ing| ing.service == service) {

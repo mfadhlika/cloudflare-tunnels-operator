@@ -16,7 +16,7 @@ pub struct TunnelCredentials {
     pub tunnel_id: String,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct OriginRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
