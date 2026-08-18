@@ -249,37 +249,42 @@ async fn apply(obj: Arc<Ingress>, ctx: Arc<Context>) -> Result<Action, Error> {
                 None
             };
 
-            let Some(svc) = ingress_path.backend.service.as_ref() else {
-                continue;
-            };
+            let ing_svc_backend = ingress_path
+                .backend
+                .service
+                .as_ref()
+                .ok_or_else(|| anyhow!("no service defined in ingress"))?;
 
-            let Some(svc_port) = svc.port.as_ref() else {
-                continue;
-            };
+            let svc = svc_api.get(&ing_svc_backend.name).await?;
 
-            let port = if let Some(port) = svc_port.number {
-                port
-            } else if let Some(name) = svc_port.name.as_ref() {
-                let svc = svc_api.get(&svc.name).await?;
-                let Some(svc_spec) = svc.spec.as_ref() else {
-                    continue;
-                };
-                let Some(port) = svc_spec.ports.iter().flatten().find_map(|svc_port| {
-                    (svc_port.name == Some(name.to_string())).then_some(svc_port.port)
-                }) else {
-                    continue;
-                };
+            let scheme = svc
+                .annotations()
+                .get(ANNOTATION_SERVER_SCHEME)
+                .cloned()
+                .unwrap_or_else(|| "http".to_string());
 
-                port
-            } else {
-                continue;
-            };
+            let svc_backend_port = ing_svc_backend
+                .port
+                .as_ref()
+                .ok_or_else(|| anyhow!("no service port defined in ingress"))?;
+
+            let port = svc_backend_port
+                .number
+                .or_else(|| {
+                    svc.spec.and_then(|spec| {
+                        spec.ports
+                            .iter()
+                            .flatten()
+                            .find(|svc_ports| svc_ports.name == svc_backend_port.name)
+                            .map(|svc_port| svc_port.port)
+                    })
+                })
+                .ok_or_else(|| anyhow!("no service port number exist or found"))?;
 
             let service = format!(
-                "http://{}.{}.svc:{}",
-                svc.name,
+                "{scheme}://{}.{}.svc:{port}",
+                ing_svc_backend.name,
                 obj.namespace().unwrap_or_else(|| "default".to_string()),
-                port
             );
 
             let ing = TunnelIngress {
