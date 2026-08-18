@@ -23,7 +23,7 @@ pub struct OriginRequest {
     pub origin_server_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ca_pool: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "noTLSVerify")]
     pub no_tls_verify: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls_timeout: Option<Duration>,
