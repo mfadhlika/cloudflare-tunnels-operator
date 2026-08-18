@@ -2,6 +2,17 @@ apiVersion: v1
 entries:
   cloudflare-tunnels-operator:
   - apiVersion: v2
+    appVersion: 0.4.7
+    created: "2026-08-18T04:51:29.095288556Z"
+    description: A Kubernetes Operator for exposing service with Cloudflare Tunnels
+      using Ingress resources
+    digest: 09a1ed974959430310a0529834dfe8fe8148665179d8bc035a446350f4a785a5
+    name: cloudflare-tunnels-operator
+    type: application
+    urls:
+    - https://github.com/mfadhlika/cloudflare-tunnels-operator/releases/download/cloudflare-tunnels-operator-0.4.7/cloudflare-tunnels-operator-0.4.7.tgz
+    version: 0.4.7
+  - apiVersion: v2
     appVersion: 0.4.4
     created: "2026-07-27T07:32:29.033045014Z"
     description: A Kubernetes Operator for exposing service with Cloudflare Tunnels
@@ -80,10 +91,10 @@ entries:
     version: 0.4.0
   - apiVersion: v2
     appVersion: 0.4.0-beta.1
-    created: "2026-07-16T06:45:46.039390069Z"
+    created: "2026-07-16T12:04:07.096930403Z"
     description: A Kubernetes Operator for exposing service with Cloudflare Tunnels
       using Ingress resources
-    digest: d845b5ff75f8c5a735fe174e298b8ca0a99556dcd3960597e98c7307764bb8f3
+    digest: d07f507aaeb08651eb7a3df1ea4a5b23ef3af29a4433d8c84fc21bb3010abf01
     name: cloudflare-tunnels-operator
     type: application
     urls:
@@ -91,10 +102,10 @@ entries:
     version: 0.4.0-beta.1
   - apiVersion: v2
     appVersion: 0.4.0-beta.1
-    created: "2026-07-16T12:04:07.096930403Z"
+    created: "2026-07-16T06:45:46.039390069Z"
     description: A Kubernetes Operator for exposing service with Cloudflare Tunnels
       using Ingress resources
-    digest: d07f507aaeb08651eb7a3df1ea4a5b23ef3af29a4433d8c84fc21bb3010abf01
+    digest: d845b5ff75f8c5a735fe174e298b8ca0a99556dcd3960597e98c7307764bb8f3
     name: cloudflare-tunnels-operator
     type: application
     urls:
@@ -353,4 +364,4 @@ entries:
     urls:
     - https://github.com/mfadhlika/cloudflare-tunnels-operator/releases/download/cloudflare-tunnels-operator-0.1.0/cloudflare-tunnels-operator-0.1.0.tgz
     version: 0.1.0
-generated: "2026-07-27T07:32:29.033588732Z"
+generated: "2026-08-18T04:51:29.095451859Z"
