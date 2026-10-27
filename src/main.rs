@@ -22,7 +22,7 @@ struct Args {
     cloudflare_email: Option<String>,
     #[arg(long)]
     cloudflare_api_key: Option<String>,
-    #[arg(long, default_value = "2026.2.0")]
+    #[arg(long, default_value = "2026.10.4")]
     cloudflared_version: String,
 }
 
